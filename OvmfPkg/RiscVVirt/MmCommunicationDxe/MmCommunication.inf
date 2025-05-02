@@ -51,10 +51,6 @@
   gEfiEventExitBootServicesGuid
   gEfiEventReadyToBootGuid
 
-[Pcd.common]
-  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferBase
-  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferSize
-
 [Depex]
   gEfiCpuArchProtocolGuid AND
   gFdtClientProtocolGuid

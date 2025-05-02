@@ -23,9 +23,9 @@
 #define MPXY_SHMEM_SIZE	4096
 
 // SMM Message ID
-#define RISCV_MSG_ID_SMM_VERSION        0x1
-#define RISCV_MSG_ID_SMM_COMMUNICATE		0x2
-#define RISCV_MSG_ID_SMM_EVENT_COMPLETE	0x3
+#define RISCV_MSG_ID_SMM_ENABLE_NOTIFICATION    0x1
+#define RISCV_MSG_ID_SMM_GET_ATTRIBUTES         0x2
+#define RISCV_MSG_ID_SMM_COMMUNICATE		0x3
 
 // SMM return error codes
 #define RISCV_SMM_RET_SUCCESS         0
@@ -35,8 +35,11 @@
 #define RISCV_SMM_RET_NO_MEMORY       -4
 
 typedef struct {
-  UINTN    Arg0;
-  UINTN    Arg1;
+  UINT32    Arg0;
+  UINT32    Arg1;
+  UINT32    Arg2;
+  UINT32    Arg3;
+  UINT32    Arg4;
 } RISCV_SMM_MSG_COMM_ARGS;
 
 typedef struct {

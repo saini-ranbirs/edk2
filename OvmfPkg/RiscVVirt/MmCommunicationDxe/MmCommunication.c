@@ -147,11 +147,8 @@ MmCommunication2Communicate (
   // Copy Communication Payload
   CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
 
-  // comm_buffer_address (64-bit physical address)
-  CommunicateArgs.Arg0 = (UINTN)mNsCommBuffMemRegion.PhysicalBase;
-
-  // comm_size_address (not used, indicated by setting to zero)
-  CommunicateArgs.Arg1 = 0;
+  // MM_COMM_INPUT_DATA_OFFSET - MM always uses entire SM
+  //CommunicateArgs.Arg0 = 0;
 
   // Call the Standalone MM environment.
   Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_COMMUNICATE,
@@ -223,7 +220,7 @@ GetMmMpxyChannelId (
                   );
   ASSERT_EFI_ERROR (Status);
 
-  Status = FdtClient->FindCompatibleNode (FdtClient, "riscv,sbi-mpxy-mm", &Node);
+  Status = FdtClient->FindCompatibleNode (FdtClient, "riscv,rpmi-mpxy-mm", &Node);
   if (EFI_ERROR (Status)) {
     DEBUG ((
       DEBUG_WARN,
@@ -258,6 +255,21 @@ GetMmMpxyChannelId (
   return EFI_SUCCESS;
 }
 
+STATIC
+EFI_STATUS
+MmChannelInit()
+{
+  // Check if the Mpxy channel exist
+  if (GetMmMpxyChannelId(&mMmChannelId) != EFI_SUCCESS) {
+    return EFI_NOT_READY;;
+  }
+
+  if (SbiMpxyChannelOpen (mMmChannelId) != EFI_SUCCESS) {
+    return EFI_NOT_READY;;
+  }
+
+  return EFI_SUCCESS;
+}
 //
 // MM Communication Protocol instance
 //
@@ -267,23 +279,26 @@ STATIC EFI_MM_COMMUNICATION2_PROTOCOL  mMmCommunication2 = {
 
 STATIC
 EFI_STATUS
-GetMmCompatibility (
+GetMmAttributes (
   )
 {
-  EFI_STATUS    Status;
-  UINT32        MmVersion;
-  RISCV_SMM_MSG_COMM_ARGS  MmVersionArgs;
-  UINTN         MmRespLen;
+  RISCV_SMM_MSG_COMM_ARGS  MmAttrArgs;
+  EFI_STATUS               Status;
+  UINT32                   MmVersion;
+  UINT64                   ShmemHigh32;
+  UINTN                    MmRespLen;
 
-  Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_VERSION,
-		(VOID *)&MmVersionArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
-		(VOID *)&MmVersionArgs, &MmRespLen);
+  Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_GET_ATTRIBUTES,
+		             (VOID *)&MmAttrArgs, 0,
+		             (VOID *)&MmAttrArgs, &MmRespLen);
 
-  if (EFI_ERROR (Status) || (0 == MmRespLen)) {
-    return Status;
+
+  if (EFI_ERROR (Status) || (0 == MmRespLen))
+  {
+    return EFI_UNSUPPORTED;
   }
 
-  MmVersion = MmVersionArgs.Arg0;
+  MmVersion = MmAttrArgs.Arg1;
 
   if ((MM_MAJOR_VER (MmVersion) == MM_CALLER_MAJOR_VER) &&
       (MM_MINOR_VER (MmVersion) >= MM_CALLER_MINOR_VER))
@@ -306,6 +321,13 @@ GetMmCompatibility (
       ));
     Status = EFI_UNSUPPORTED;
   }
+
+  // Shared Memory between NS and Secure domains
+  ShmemHigh32 = MmAttrArgs.Arg3;
+  mNsCommBuffMemRegion.PhysicalBase = MmAttrArgs.Arg2 | (ShmemHigh32 << 32);
+  // During boot , Virtual and Physical are same
+  mNsCommBuffMemRegion.VirtualBase = mNsCommBuffMemRegion.PhysicalBase;
+  mNsCommBuffMemRegion.Length      = MmAttrArgs.Arg4;
 
   return Status;
 }
@@ -370,47 +392,17 @@ MmCommunication2Initialize (
 {
   EFI_STATUS  Status;
   UINTN       Index;
-  VOID        *SbiShmem;
-  UINT64      ShmemP;
 
-  // Check if the Mpxy channel exist
-  Status = GetMmMpxyChannelId(&mMmChannelId);
+  Status = MmChannelInit();
   if (EFI_ERROR (Status)) {
-    goto ReturnErrorStatus;
-  }
-
-  if(FALSE == SbiMpxyShmemInitialized()) {
-	//
-	// Allocate memory to be shared with OpenSBI for MPXY
-	//
-	SbiShmem = AllocateAlignedPages (EFI_SIZE_TO_PAGES(MPXY_SHMEM_SIZE),
-				MPXY_SHMEM_SIZE // Align
-				);
-
-	if (SbiShmem == NULL) {
-		goto ReturnErrorStatus;
-	}
-	ZeroMem (SbiShmem, MPXY_SHMEM_SIZE);
-	ShmemP = (UINT64)(SbiShmem);
-    Status = SbiMpxySetShmem (0UL,
-             ShmemP,
-             MPXY_SHMEM_SIZE
-             );
-    if (EFI_ERROR(Status)) {
-		goto ReturnErrorStatus;
-    }
+    return Status;
   }
 
   // Check if we can make the MM call
-  Status = GetMmCompatibility ();
+  Status = GetMmAttributes ();
   if (EFI_ERROR (Status)) {
-    goto ReturnErrorStatus;
+    return Status;
   }
-
-  mNsCommBuffMemRegion.PhysicalBase = PcdGet64 (PcdMmBufferBase);
-  // During boot , Virtual and Physical are same
-  mNsCommBuffMemRegion.VirtualBase = mNsCommBuffMemRegion.PhysicalBase;
-  mNsCommBuffMemRegion.Length      = PcdGet64 (PcdMmBufferSize);
 
   ASSERT (mNsCommBuffMemRegion.PhysicalBase != 0);
 
@@ -466,6 +458,5 @@ CleanAddedMemorySpace:
          mNsCommBuffMemRegion.Length
          );
 
-ReturnErrorStatus:
   return EFI_INVALID_PARAMETER;
 }
