@@ -144,8 +144,15 @@ MmCommunication2Communicate (
     return Status;
   }
 
+  DEBUG ((
+     DEBUG_INFO,
+     "MmCommunication2Communicate - CopyMem Addr 0x%p 0x%x BufferSize = 0x%x\n",
+     mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize
+     ));
+
   // Copy Communication Payload
-  CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
+  // Commenting CopyMem as EXCEPT_RISCV_STORE_ACCESS_PAGE_FAULT coming
+  //CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
 
   // MM_COMM_INPUT_DATA_OFFSET - MM always uses entire SM
   //CommunicateArgs.Arg0 = 0;
@@ -282,7 +289,7 @@ EFI_STATUS
 GetMmAttributes (
   )
 {
-  RISCV_SMM_MSG_COMM_ARGS  MmAttrArgs;
+  RISCV_SMM_MSG_ATTR_ARGS  MmAttrArgs;
   EFI_STATUS               Status;
   UINT32                   MmVersion;
   UINT64                   ShmemHigh32;
@@ -324,10 +331,18 @@ GetMmAttributes (
 
   // Shared Memory between NS and Secure domains
   ShmemHigh32 = MmAttrArgs.Arg3;
-  mNsCommBuffMemRegion.PhysicalBase = MmAttrArgs.Arg2 | (ShmemHigh32 << 32);
-  // During boot , Virtual and Physical are same
+  mNsCommBuffMemRegion.PhysicalBase = (ShmemHigh32 << 32) | MmAttrArgs.Arg2;
+  // During boot, Virtual and Physical are same
   mNsCommBuffMemRegion.VirtualBase = mNsCommBuffMemRegion.PhysicalBase;
   mNsCommBuffMemRegion.Length      = MmAttrArgs.Arg4;
+
+  DEBUG ((
+    DEBUG_INFO,
+    "MM Address: 0x%x%x, Size=0x%x\n",
+    MmAttrArgs.Arg3,
+    MmAttrArgs.Arg2,
+    MmAttrArgs.Arg4
+    ));
 
   return Status;
 }

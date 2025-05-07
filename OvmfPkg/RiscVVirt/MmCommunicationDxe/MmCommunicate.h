@@ -25,7 +25,7 @@
 // SMM Message ID
 #define RISCV_MSG_ID_SMM_ENABLE_NOTIFICATION    0x1
 #define RISCV_MSG_ID_SMM_GET_ATTRIBUTES         0x2
-#define RISCV_MSG_ID_SMM_COMMUNICATE		0x3
+#define RISCV_MSG_ID_SMM_COMMUNICATE            0x3
 
 // SMM return error codes
 #define RISCV_SMM_RET_SUCCESS         0
@@ -40,6 +40,13 @@ typedef struct {
   UINT32    Arg2;
   UINT32    Arg3;
   UINT32    Arg4;
+} RISCV_SMM_MSG_ATTR_ARGS;
+
+typedef struct {
+  UINT32    Arg0;
+  UINT32    Arg1;
+  UINT32    Arg2;
+  UINT32    Arg3;
 } RISCV_SMM_MSG_COMM_ARGS;
 
 typedef struct {
