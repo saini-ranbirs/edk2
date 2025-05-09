@@ -361,7 +361,7 @@
   # Some platforms can get DRAM extensions, these additional regions may be
   # declared to UEFI using separate resource descriptor HOBs
   gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferBase|0|UINT64|0x00000074
-  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferSize|0|UINT64|0x00000075
+  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferSize|0|UINT64|0x00200000
 
 [PcdsDynamic, PcdsDynamicEx]
   gUefiOvmfPkgTokenSpaceGuid.PcdEmuVariableEvent|0|UINT64|2
