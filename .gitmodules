@@ -26,6 +26,7 @@
 [submodule "MdePkg/Library/BaseFdtLib/libfdt"]
 	path = MdePkg/Library/BaseFdtLib/libfdt
 	url = https://github.com/devicetree-org/pylibfdt.git
+	url = https://github.com/Dasharo/subhook.git
 [submodule "MdePkg/Library/MipiSysTLib/mipisyst"]
 	path = MdePkg/Library/MipiSysTLib/mipisyst
 	url = https://github.com/MIPI-Alliance/public-mipi-sys-t.git
