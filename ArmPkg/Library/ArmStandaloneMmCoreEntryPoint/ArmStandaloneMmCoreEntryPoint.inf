@@ -49,6 +49,10 @@
   ArmFfaLib
   StackCheckLib
 
+[LibraryClasses.RISCV64]
+  RiscVSbiLib
+  RiscvMpxyLib
+
 [Guids]
   gMpInformationHobGuid
   gEfiMmPeiMmramMemoryReserveGuid

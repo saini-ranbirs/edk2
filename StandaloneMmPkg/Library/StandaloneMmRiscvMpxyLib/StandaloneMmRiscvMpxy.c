@@ -16,7 +16,6 @@
 #include <Library/PcdLib.h>
 #include <Library/SafeIntLib.h>
 #include <Library/BaseRiscVSbiLib.h>
-#include <Library/DxeRiscvMpxy.h>
 
 #define INVAL_PHYS_ADDR      (-1U)
 #define INVALID_CHAN         -1
@@ -28,6 +27,20 @@
 #define LLE_TO_CPU(x)        (x)
 #define CPU_TO_LLE(x)        (x)
 #endif
+
+enum {
+  MpxyChanAttrProtId,
+  MpxyChanAttrProtVersion,
+  MpxyChanAttrMsgDataMaxLen,
+  MpxyChanAttrMsgSendTimeout,
+  MpxyChanAttrCapability,
+  MpxyChanAttrMsiAddrLow,
+  MpxyChanAttrMsiAddrHigh,
+  MpxyChanAttrMsiData,
+  MpxyChanAttrSseEventId,
+  MpxyChanAttrEventStateControl,
+  MpxyChanAttrMax
+};
 
 STATIC VOID *gNonChanTempShmem = NULL;
 STATIC VOID * gShmemVirt = NULL;
@@ -43,34 +56,13 @@ STATIC UINTN gShmemRefCount = 0;
 STATIC
 EFI_STATUS
 EFIAPI
-SbiMpxyGetShmemSize(
-  OUT UINT64 *ShmemSize
-  )
-{
-   SBI_RET  Ret;
-
-   Ret = SbiCall (
-           SBI_EXT_MPXY,
-           SBI_EXT_MPXY_GET_SHMEM_SIZE,
-           0
-           );
-
-  if (Ret.Error == SBI_SUCCESS) {
-      *ShmemSize = Ret.Value;
-      return EFI_SUCCESS;
-  }
-
-  return TranslateError (Ret.Error);
-}
-
-STATIC
-EFI_STATUS
-EFIAPI
 SbiMpxySetShmem(
   IN UINT64 ShmemPhysHi,
   IN UINT64 ShmemPhysLo,
+  IN UINT64 ShmemSize,
   OUT UINT64 *PrevShmemPhysHi,
   OUT UINT64 *PrevShmemPhysLo,
+  OUT UINT64 *PrevShmemSize,
   BOOLEAN ReadBackOldShmem
   )
 {
@@ -85,7 +77,8 @@ SbiMpxySetShmem(
   Ret = SbiCall (
           SBI_EXT_MPXY,
           SBI_EXT_MPXY_SET_SHMEM,
-          3,
+          4,
+          CPU_TO_LLE(ShmemSize),
           CPU_TO_LLE(ShmemPhysLo),
           CPU_TO_LLE(ShmemPhysHi),
           Flags
@@ -93,6 +86,7 @@ SbiMpxySetShmem(
 
   if (Ret.Error == SBI_SUCCESS) {
     if (ShmemPhysLo == INVAL_PHYS_ADDR && ShmemPhysHi == INVAL_PHYS_ADDR) {
+      gShmemSize = 0;
       gShmemPhysHi = INVAL_PHYS_ADDR;
       gShmemPhysLo = INVAL_PHYS_ADDR;
       gShmemSet = 0;
@@ -101,13 +95,15 @@ SbiMpxySetShmem(
 
     gShmemPhysLo = ShmemPhysLo;
     gShmemPhysHi = ShmemPhysHi;
+    gShmemSize = ShmemSize;
     gShmemSet = 1;
 
     PrevMemDet = (UINT64 *)gShmemPhysLo;
 
     if (ReadBackOldShmem) {
-      *PrevShmemPhysLo = LLE_TO_CPU(PrevMemDet[0]);
-      *PrevShmemPhysHi = LLE_TO_CPU(PrevMemDet[1]);
+      *PrevShmemSize = LLE_TO_CPU(PrevMemDet[0]);
+      *PrevShmemPhysLo = LLE_TO_CPU(PrevMemDet[1]);
+      *PrevShmemPhysHi = LLE_TO_CPU(PrevMemDet[2]);
     }
   }
 
@@ -128,6 +124,8 @@ SbiMpxyDisableShmem(
 
   Status = SbiMpxySetShmem(INVAL_PHYS_ADDR,
              INVAL_PHYS_ADDR,
+             0,
+             NULL,
              NULL,
              NULL,
              FALSE
@@ -162,7 +160,7 @@ SbiMpxyGetChannelList(
   OUT UINTN *Returned
   )
 {
-  UINT64 OPhysHi, OPhysLo;
+  UINT64 OPhysHi, OPhysLo, OPhysSize;
   EFI_STATUS Status;
   SBI_RET Ret;
   UINT32 *Shmem = gNonChanTempShmem;
@@ -175,8 +173,10 @@ SbiMpxyGetChannelList(
   /* Set the shared memory to memory allocated for non-channel specific reads */
   Status = SbiMpxySetShmem(0,
              (UINT64)gNonChanTempShmem,
+             EFI_PAGE_SIZE,
              &OPhysHi,
              &OPhysLo,
+             &OPhysSize,
              TRUE /* Read back the old address */
              );
 
@@ -209,6 +209,8 @@ SbiMpxyGetChannelList(
   /* Switch back to old shared memory */
   Status = SbiMpxySetShmem(OPhysHi,
              OPhysLo,
+             OPhysSize,
+             NULL,
              NULL,
              NULL,
              FALSE /* Read back the old address */
@@ -230,26 +232,28 @@ SbiMpxyReadChannelAttrs(
   OUT UINT32 *Attrs
   )
 {
-  UINT64 OPhysHi, OPhysLo;
+  UINT64 OPhysHi, OPhysLo, OPhysSize;
   EFI_STATUS Status;
   SBI_RET Ret;
 
   if (!gMpxyLibInitialized) {
 	  return (EFI_DEVICE_ERROR);
   }
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 0\n"));
   /* Set the shared memory to memory allocated for non-channel specific reads */
   Status = SbiMpxySetShmem(0,
              (UINT64)gNonChanTempShmem,
+             EFI_PAGE_SIZE,
              &OPhysHi,
              &OPhysLo,
+             &OPhysSize,
              TRUE /* Read back the old address */
              );
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 1\n"));
   if (EFI_ERROR(Status)) {
     return (EFI_DEVICE_ERROR);
   }
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 2\n"));
   Ret = SbiCall (
           SBI_EXT_MPXY,
           SBI_EXT_MPXY_READ_ATTRS,
@@ -258,28 +262,30 @@ SbiMpxyReadChannelAttrs(
           BaseAttrId, /* Base attribute Id */
           NrAttrs /* Number of attributes */
           );
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 3\n"));
   if (Ret.Error != SBI_SUCCESS) {
     return TranslateError (Ret.Error);
   }
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 4\n"));
   CopyMem(Attrs,
     gNonChanTempShmem,
     sizeof(UINT32) * NrAttrs
     );
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 5\n"));
   /* Switch back to old shared memory */
   Status = SbiMpxySetShmem(OPhysHi,
              OPhysLo,
+             OPhysSize,
+             NULL,
              NULL,
              NULL,
              FALSE /* Read back the old address */
              );
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 6\n"));
   if (EFI_ERROR(Status)) {
     return Status;
   }
-
+DEBUG ((DEBUG_ERROR, "SbiMpxyReadChannelAttrs DEBUG 7\n"));
   return EFI_SUCCESS;
 }
 
@@ -289,26 +295,34 @@ SbiMpxyChannelOpen(
   IN UINTN ChannelId
   )
 {
-  UINT32 Attributes[MpxyChanAttrMsgDataMaxLen]; // space to read id and version
+  UINT32 Attributes[MpxyChanAttrMax];
   UINT32 ChanDataLen;
   VOID *SbiShmem;
   UINTN NrEfiPages;
   EFI_STATUS Status;
-
+DEBUG ((
+        DEBUG_ERROR,
+        "StandaloneMmSbiMpxyChannelOpen DEBUG 0\n"));
   if (SbiMpxyShmemInitialized() == FALSE) {
     return (EFI_UNSUPPORTED);
   }
-
+DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyChannelOpen DEBUG 1\n"));
   Status = SbiMpxyReadChannelAttrs(ChannelId,
              0,
              MpxyChanAttrMax,
              &Attributes[0]
              );
-
+DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyChannelOpen DEBUG 2\n"));
   if (EFI_ERROR(Status)) {
     return Status;
   }
-
+DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyChannelOpen DEBUG 3\n"));
   ChanDataLen = Attributes[MpxyChanAttrMsgDataMaxLen];
   NrEfiPages = EFI_SIZE_TO_PAGES(ChanDataLen);
 
@@ -330,6 +344,8 @@ SbiMpxyChannelOpen(
       /* Set the new shared memory */
       Status = SbiMpxySetShmem (0,
                  (UINT64)SbiShmem,
+                 NrEfiPages * EFI_PAGE_SIZE,
+                 NULL,
                  NULL,
                  NULL,
                  FALSE /* Not interested in old memory */
@@ -358,6 +374,8 @@ SbiMpxyChannelOpen(
 
     Status = SbiMpxySetShmem (0,
                (UINT64)SbiShmem,
+               NrEfiPages * EFI_PAGE_SIZE,
+               NULL,
                NULL,
                NULL,
                FALSE
@@ -412,7 +430,9 @@ SbiMpxySendMessage(
 {
   SBI_RET  Ret;
   UINT64 Phys = gShmemPhysLo;
-
+DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxySendMessage0\n"));
   if (!gShmemSet) {
     return EFI_DEVICE_ERROR;
   }
@@ -427,7 +447,9 @@ SbiMpxySendMessage(
     Message,
     MessageDataLen
     );
-
+DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxySendMessage1\n"));
   Ret = SbiCall (
           SBI_EXT_MPXY,
           SBI_EXT_MPXY_SEND_MSG_WITH_RESP,
@@ -448,6 +470,10 @@ SbiMpxySendMessage(
     *ResponseLen = Ret.Value;
   }
 
+  DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxySendMessage2\n"));
+
   return TranslateError (Ret.Error);
 }
 
@@ -463,49 +489,41 @@ SbiMpxySendMessage(
 RETURN_STATUS
 EFIAPI
 SbiMpxyLibConstructor (
-  IN EFI_HANDLE        ImageHandle,
-  IN EFI_SYSTEM_TABLE  *SystemTable
+  IN EFI_HANDLE            ImageHandle,
+  IN EFI_MM_SYSTEM_TABLE   *MmSystemTable
   )
 {
+#define MPXY_SHMEM_SIZE 4096
+
   EFI_STATUS                   Status;
-  UINT64 ShmemSize;
-  Status = SbiProbeExtension(SBI_EXT_MPXY);
-
-  ASSERT_EFI_ERROR (Status);
-
-  Status = SbiMpxyGetShmemSize(&ShmemSize);
-  if (EFI_ERROR(Status)) {
-    DEBUG ((
-      DEBUG_WARN,
-      "%a: Failed to get the shared memory size\n",
-      __func__
-      ));
-    return 0;
-  }
-
+  DEBUG ((DEBUG_INFO, "################################# StandaloneMmSbiMpxyLibConstructor ##############################\n"));
+  
   DEBUG ((
-    DEBUG_WARN,
-    "%a: Shared memory size to be allocated: %lu bytes\n",
-    __func__, ShmemSize
-    ));
+        DEBUG_ERROR,
+        "SbiMpxyLibConstructor XX DEBUG 0\n"));
+  Status = SbiProbeExtension(SBI_EXT_MPXY);
+  DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyLibConstructor XX DEBUG 1\n"));
+  ASSERT_EFI_ERROR (Status);
 
   //
   // Allocate memory to be shared with OpenSBI for initial MPXY communications
   // untils channels are initialized by their respective drivers.
   //
-  gNonChanTempShmem = AllocateAlignedPages (EFI_SIZE_TO_PAGES(ShmemSize),
-                        ShmemSize // Align
+  gNonChanTempShmem = AllocateAlignedPages (EFI_SIZE_TO_PAGES(MPXY_SHMEM_SIZE),
+                        MPXY_SHMEM_SIZE // Align
                         );
-
-  gShmemSize = ShmemSize;
-
+  DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyLibConstructor XX DEBUG 2\n"));
   if (gNonChanTempShmem == NULL) {
     return (0);
   }
-
+  DEBUG ((
+        DEBUG_ERROR,
+        "SbiMpxyLibConstructor XX DEBUG 3\n"));
   gMpxyLibInitialized = TRUE;
-
-  DEBUG((DEBUG_WARN, "%a: initialization done\n", __func__));
 
   return (0);
 }
