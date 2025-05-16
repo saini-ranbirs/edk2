@@ -151,8 +151,7 @@ MmCommunication2Communicate (
      ));
 
   // Copy Communication Payload
-  // Commenting CopyMem as EXCEPT_RISCV_STORE_ACCESS_PAGE_FAULT coming
-  //CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
+  CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
 
   // MM_COMM_INPUT_DATA_OFFSET - MM always uses entire SM
   //CommunicateArgs.Arg0 = 0;
