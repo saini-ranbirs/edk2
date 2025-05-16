@@ -141,6 +141,7 @@ PlatformPeimInitialization (
   PopulateIoResources (Base, "ns16550a");
   PopulateIoResources (Base, "qemu,fw-cfg-mmio");
   PopulateIoResources (Base, "virtio,mmio");
+  PopulateIoResources (Base, "riscv,rpmi-mm");
 
   return EFI_SUCCESS;
 }
