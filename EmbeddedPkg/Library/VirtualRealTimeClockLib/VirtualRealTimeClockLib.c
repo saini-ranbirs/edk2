@@ -69,6 +69,7 @@ LibGetTime (
   // Get the epoch time from non-volatile storage
   Size         = sizeof (UINTN);
   EpochSeconds = 0;
+  DEBUG ((DEBUG_INFO, "Ranbir: EfiGetVariable\n"));
   Status       = EfiGetVariable (
                    (CHAR16 *)mEpochVariableName,
                    &gEfiCallerIdGuid,

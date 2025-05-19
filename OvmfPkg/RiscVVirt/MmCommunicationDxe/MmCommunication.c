@@ -70,6 +70,59 @@ STATIC UINT32 mMmChannelId = 0;
                                  accessed by the MM environment.
 
 **/
+static void memdump(const void *src, UINTN count, void *dest);
+
+static void memdump(const void *src, UINTN count, void *dest)
+{
+#define BFR_DATA_LIMIT  16
+
+	const char *temp = src;
+	char *tmp = dest;
+	unsigned char bfr_data[BFR_DATA_LIMIT];
+	UINTN bfr_counter, bfr_counter_limit;
+	UINTN remaining = count, loop_count = 0;
+
+	DEBUG((DEBUG_INFO,"\nEDK2 - Data Size : %06lu", count));
+
+	while (remaining) {
+		bfr_counter = 0;
+
+		(remaining >= BFR_DATA_LIMIT) ?
+		    (bfr_counter_limit = BFR_DATA_LIMIT) :
+		    (bfr_counter_limit = remaining);
+
+		while (bfr_counter < bfr_counter_limit) {
+			bfr_data[bfr_counter] = *(temp + bfr_counter);
+			if (dest)
+				*(tmp + bfr_counter) = bfr_data[bfr_counter];
+			bfr_counter++;
+		}
+
+		/* For simplicity, fill rest with ZERO's if required */
+		while (bfr_counter < BFR_DATA_LIMIT) {
+			bfr_data[bfr_counter] = 0x00;
+			bfr_counter++;
+		}
+
+		if (loop_count < 10) {
+		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+			"%02x%02x %02x%02x %02x%02x %02x%02x "
+			"%02x%02x %02x%02x %02x%02x %02x%02x",
+			temp, count - remaining,
+			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
+			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
+			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
+			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
+		}
+
+		temp = temp + bfr_counter_limit;
+		remaining = remaining - bfr_counter_limit;
+		loop_count++;
+	}
+
+	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
+}
+
 EFI_STATUS
 EFIAPI
 MmCommunication2Communicate (
@@ -81,14 +134,16 @@ MmCommunication2Communicate (
 {
 
   EFI_MM_COMMUNICATE_HEADER  *CommunicateHeader;
-  RISCV_SMM_MSG_COMM_ARGS     CommunicateArgs;
+  RISCV_SMM_MSG_COMM_ARGS     CommunicateReqArgs;
+  RISCV_SMM_MSG_COMM_ARGS     CommunicateRspArgs;
   EFI_STATUS                 Status;
   UINTN                      BufferSize;
   UINTN                      MmRespLen;
   Status     = EFI_ACCESS_DENIED;
   BufferSize = 0;
 
-  ZeroMem (&CommunicateArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
+  ZeroMem (&CommunicateReqArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
+  ZeroMem (&CommunicateRspArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
 
   //
   // Check parameters
@@ -144,27 +199,36 @@ MmCommunication2Communicate (
     return Status;
   }
 
-  DEBUG ((
-     DEBUG_INFO,
-     "MmCommunication2Communicate - CopyMem Addr 0x%p 0x%x BufferSize = 0x%x\n",
-     mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize
-     ));
-
   // Copy Communication Payload
   CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
 
   // MM_COMM_INPUT_DATA_OFFSET - MM always uses entire SM
-  //CommunicateArgs.Arg0 = 0;
+  CommunicateReqArgs.Arg0 = 0;
+  CommunicateReqArgs.Arg1 = BufferSize;
+  CommunicateReqArgs.Arg2 = BufferSize;
+  CommunicateReqArgs.Arg3 = mNsCommBuffMemRegion.Length - CommunicateReqArgs.Arg2;
+
+  memdump ((VOID *)mNsCommBuffMemRegion.VirtualBase, BufferSize, NULL);
+  DEBUG ((
+    DEBUG_INFO,
+    "Ranbir: Calling SbiMpxySendMessage - CopyMem Addr 0x%p 0x%x BufferSize = 0x%x\n",
+    mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize
+    ));
 
   // Call the Standalone MM environment.
   Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_COMMUNICATE,
-		(VOID *)&CommunicateArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
-		(VOID *)&CommunicateArgs, &MmRespLen);
+		(VOID *)&CommunicateReqArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
+		(VOID *)&CommunicateRspArgs, &MmRespLen);
+  DEBUG ((
+    DEBUG_INFO,
+    "Ranbir: SbiMpxySendMessage RspArgs.Arg0 %d RspArgs.Arg1 %d MmRespLen %d\n",
+    CommunicateRspArgs.Arg0, CommunicateRspArgs.Arg1, MmRespLen
+    ));
   if (EFI_ERROR (Status) || (0 == MmRespLen)) {
     return Status;
   }
 
-  switch (CommunicateArgs.Arg0) {
+  switch (CommunicateRspArgs.Arg0) {
     case RISCV_SMM_RET_SUCCESS:
       ZeroMem (CommBufferVirtual, BufferSize);
       // On successful return, the size of data being returned is inferred from
@@ -174,11 +238,16 @@ MmCommunication2Communicate (
                           sizeof (CommunicateHeader->HeaderGuid) +
                           sizeof (CommunicateHeader->MessageLength);
 
-      CopyMem (
-        CommBufferVirtual,
-        (VOID *)mNsCommBuffMemRegion.VirtualBase,
-        BufferSize
-        );
+      DEBUG ((
+        DEBUG_INFO,
+        "Ranbir: MmCommunication2Communicate - Response Addr 0x%p "
+        "Response Len %d BufferSize = 0x%x\n",
+        (VOID *)mNsCommBuffMemRegion.VirtualBase + CommunicateReqArgs.Arg2,
+        CommunicateRspArgs.Arg1, BufferSize
+        ));
+      CopyMem (CommBufferVirtual,
+               (VOID *)mNsCommBuffMemRegion.VirtualBase + CommunicateReqArgs.Arg2,
+               BufferSize);
       Status = EFI_SUCCESS;
       break;
 
@@ -380,6 +449,10 @@ MmGuidedEventNotify (
   Header.Data[0]       = 0;
 
   Size = sizeof (Header);
+  DEBUG ((
+     DEBUG_INFO,
+     "calling MmCommunication2Communicate - RS 1\n"
+     ));
   MmCommunication2Communicate (&mMmCommunication2, &Header, &Header, &Size);
 }
 

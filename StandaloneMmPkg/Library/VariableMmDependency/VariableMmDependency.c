@@ -34,6 +34,7 @@ VariableMmDependencyLibConstructor (
   EFI_HANDLE  Handle;
 
   Handle = NULL;
+  DEBUG((DEBUG_INFO,"Ranbir: VariableMmDependencyLibConstructor: %d\n", __LINE__));
   Status = gBS->InstallMultipleProtocolInterfaces (
                   &Handle,
                   &gEfiSmmVariableProtocolGuid,
