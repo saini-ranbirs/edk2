@@ -320,7 +320,7 @@ InitNonVolatileVariableStore (
 
   mVariableModuleGlobal->VariableGlobal.NonVolatileVariableBase = VariableStoreBase;
   mNvVariableCache                                              = (VARIABLE_STORE_HEADER *)(UINTN)VariableStoreBase;
-  mVariableModuleGlobal->VariableGlobal.AuthFormat              = (BOOLEAN)(CompareGuid (&mNvVariableCache->Signature, &gEfiAuthenticatedVariableGuid));
+  mVariableModuleGlobal->VariableGlobal.AuthFormat              = FALSE; //(BOOLEAN)(CompareGuid (&mNvVariableCache->Signature, &gEfiAuthenticatedVariableGuid));
 
   mVariableModuleGlobal->MaxVariableSize     = PcdGet32 (PcdMaxVariableSize);
   mVariableModuleGlobal->MaxAuthVariableSize = ((PcdGet32 (PcdMaxAuthVariableSize) != 0) ? PcdGet32 (PcdMaxAuthVariableSize) : mVariableModuleGlobal->MaxVariableSize);
