@@ -893,10 +893,12 @@ FindVariable (
                 mVariableModuleGlobal->VariableGlobal.AuthFormat
                 );
     if (!EFI_ERROR (Status)) {
+      DEBUG((DEBUG_INFO, "Variable EFI_FOUND\n"));
       return Status;
     }
   }
 
+  DEBUG((DEBUG_INFO, "Variable EFI_NOT_FOUND\n"));
   return EFI_NOT_FOUND;
 }
 
@@ -2511,8 +2513,11 @@ VariableServiceGetNextVariableName (
   BOOLEAN                AuthFormat;
   VARIABLE_HEADER        *VariablePtr;
   VARIABLE_STORE_HEADER  *VariableStoreHeader[VariableStoreTypeMax];
+  static UINTN           CallCount = 0;
 
+  CallCount++;
   if ((VariableNameSize == NULL) || (VariableName == NULL) || (VendorGuid == NULL)) {
+    CallCount--;
     return EFI_INVALID_PARAMETER;
   }
 
@@ -2527,6 +2532,7 @@ VariableServiceGetNextVariableName (
     // Null-terminator is not found in the first VariableNameSize bytes of the input VariableName buffer,
     // follow spec to return EFI_INVALID_PARAMETER.
     //
+    CallCount--;
     return EFI_INVALID_PARAMETER;
   }
 
@@ -2570,6 +2576,7 @@ VariableServiceGetNextVariableName (
     *VariableNameSize = VarNameSize;
   }
 
+  DEBUG ((DEBUG_INFO, "Ranbir: CallCount = %d Status2 = %d NameSize = %d\n", CallCount, Status, *VariableNameSize));
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }
@@ -2626,6 +2633,7 @@ VariableServiceSetVariable (
 
   AuthFormat = mVariableModuleGlobal->VariableGlobal.AuthFormat;
 
+  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable IN \n"));
   //
   // Check input parameters.
   //
@@ -2913,6 +2921,7 @@ Done:
     }
   }
 
+  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable OUT \n"));
   return Status;
 }
 
@@ -3460,6 +3469,7 @@ VariableWriteServiceInitialize (
     mAuthContextIn.StructSize          = sizeof (AUTH_VAR_LIB_CONTEXT_IN);
     mAuthContextIn.MaxAuthVariableSize =  mVariableModuleGlobal->MaxAuthVariableSize -
                                          GetVariableHeaderSize (mVariableModuleGlobal->VariableGlobal.AuthFormat);
+    DEBUG ((DEBUG_INFO, "NOTICE - AuthVariableLibInitialize() called !\n"));
     Status = AuthVariableLibInitialize (&mAuthContextIn, &mAuthContextOut);
     if (!EFI_ERROR (Status)) {
       DEBUG ((DEBUG_INFO, "Variable driver will work with auth variable support!\n"));
