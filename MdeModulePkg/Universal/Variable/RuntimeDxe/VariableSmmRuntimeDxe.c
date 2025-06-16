@@ -66,6 +66,56 @@ EFI_LOCK                        mVariableServicesLock;
 EDKII_VARIABLE_LOCK_PROTOCOL    mVariableLock;
 EDKII_VAR_CHECK_PROTOCOL        mVarCheck;
 
+static void memdump(const void *src, UINTN count, char *name);
+
+static void memdump(const void *src, UINTN count, char *name)
+{
+#define BFR_DATA_LIMIT  16
+
+	const char *temp = src;
+	unsigned char bfr_data[BFR_DATA_LIMIT];
+	UINTN bfr_counter, bfr_counter_limit;
+	UINTN remaining = count, loop_count = 0;
+
+	DEBUG((DEBUG_INFO,"\nEDK2 - %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
+
+	while (remaining) {
+		bfr_counter = 0;
+
+		(remaining >= BFR_DATA_LIMIT) ?
+		    (bfr_counter_limit = BFR_DATA_LIMIT) :
+		    (bfr_counter_limit = remaining);
+
+		while (bfr_counter < bfr_counter_limit) {
+			bfr_data[bfr_counter] = *(temp + bfr_counter);
+			bfr_counter++;
+		}
+
+		/* For simplicity, fill rest with ZERO's if required */
+		while (bfr_counter < BFR_DATA_LIMIT) {
+			bfr_data[bfr_counter] = 0x00;
+			bfr_counter++;
+		}
+
+		if (loop_count < 7) {
+		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+			"%02x%02x %02x%02x %02x%02x %02x%02x "
+			"%02x%02x %02x%02x %02x%02x %02x%02x",
+			temp, count - remaining,
+			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
+			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
+			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
+			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
+		}
+
+		temp = temp + bfr_counter_limit;
+		remaining = remaining - bfr_counter_limit;
+		loop_count++;
+	}
+
+	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
+}
+
 /**
   The logic to initialize the VariablePolicy engine is in its own file.
 
@@ -244,6 +294,8 @@ InitCommunicateBuffer (
   if (DataSize + SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE > mVariableBufferSize) {
     return EFI_INVALID_PARAMETER;
   }
+
+  DEBUG((DEBUG_INFO,"Ranbir: InitCommunicateBuffer: %d \n", DataSize + SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE));
 
   SmmCommunicateHeader = (EFI_MM_COMMUNICATE_HEADER *)mVariableBuffer;
   CopyGuid (&SmmCommunicateHeader->HeaderGuid, &gEfiSmmVariableProtocolGuid);
@@ -753,6 +805,8 @@ FindVariableInSmm (
     return EFI_INVALID_PARAMETER;
   }
 
+  memdump(VariableName, VariableNameSize, "VariableName");
+
   //
   // Init the communicate buffer. The buffer data size is:
   // SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE + PayloadSize.
@@ -763,6 +817,8 @@ FindVariableInSmm (
     //
     TempDataSize = mVariableBufferPayloadSize - OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name) - VariableNameSize;
   }
+
+  memdump(VendorGuid, sizeof(EFI_GUID), "VendorGuid");
 
   PayloadSize = OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name) + VariableNameSize + TempDataSize;
 
@@ -784,11 +840,13 @@ FindVariableInSmm (
 
   CopyMem (SmmVariableHeader->Name, VariableName, SmmVariableHeader->NameSize);
 
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer PayloadSize %d \n", PayloadSize));
   //
   // Send data to SMM.
   //
   Status = SendCommunicateBuffer (PayloadSize);
 
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status1 = %d\n", Status));
   //
   // Get data from SMM.
   //
@@ -815,6 +873,7 @@ FindVariableInSmm (
   }
 
 Done:
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status2 = %d\n", Status));
   return Status;
 }
 
@@ -868,12 +927,18 @@ RuntimeServiceGetVariable (
 
   AcquireLockOnlyAtBootTime (&mVariableServicesLock);
   if (FeaturePcdGet (PcdEnableVariableRuntimeCache)) {
+    DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable calling FindVariableInRuntimeCache\n"));
     Status = FindVariableInRuntimeCache (VariableName, VendorGuid, Attributes, DataSize, Data);
   } else {
+    DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable calling FindVariableInSmm\n"));
     Status = FindVariableInSmm (VariableName, VendorGuid, Attributes, DataSize, Data);
   }
 
   ReleaseLockOnlyAtBootTime (&mVariableServicesLock);
+
+  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable Status %d\n", Status));
+  if (Status == EFI_SUCCESS)
+	memdump(Data, *DataSize, "GVData");
 
   return Status;
 }
@@ -1050,6 +1115,7 @@ GetNextVariableNameInSmm (
   if (OutVariableNameSize > InVariableNameSize) {
     ZeroMem ((UINT8 *)SmmGetNextVariableName->Name + InVariableNameSize, OutVariableNameSize - InVariableNameSize);
   }
+  DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm before SMM\n"));
 
   //
   // Send data to SMM
@@ -1065,16 +1131,30 @@ GetNextVariableNameInSmm (
     // Only update VariableNameSize when needed
     //
     *VariableNameSize = SmmGetNextVariableName->NameSize;
+    if (Status == EFI_BUFFER_TOO_SMALL)
+	DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm updated VariableNameSize\n"));
+    DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm VariableNameSize = %d\n", *VariableNameSize));
   }
 
   if (EFI_ERROR (Status)) {
     goto Done;
   }
 
+  DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm after SMM\n"));
   CopyGuid (VendorGuid, &SmmGetNextVariableName->Guid);
   CopyMem (VariableName, SmmGetNextVariableName->Name, SmmGetNextVariableName->NameSize);
 
 Done:
+  /*{
+	unsigned int Count = 1;
+
+	while (Count >= 0) {
+		Count++;
+		Count = Count % 100;
+		if (Count == 0) Count = 1;
+	}
+  }*/
+
   return Status;
 }
 
@@ -1191,6 +1271,9 @@ RuntimeServiceSetVariable (
   SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE  *SmmVariableHeader;
   UINTN                                     VariableNameSize;
 
+  //for (unsigned int Counter = 0; Counter >= 0; Counter++)
+	//  Counter %= 10;
+
   //
   // Check input parameters.
   //
@@ -1251,6 +1334,8 @@ Done:
         );
     }
   }
+
+  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceSetVariable %d VariableNameSize %d DataSize %d Status %d\n", EfiAtRuntime (), VariableNameSize, DataSize, Status));
 
   return Status;
 }
@@ -1470,6 +1555,7 @@ GetVariablePayloadSize (
   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE;
   SmmGetPayloadSize                   = (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE *)SmmVariableFunctionHeader->Data;
 
+  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmVariableFunctionHeader->Function));
   //
   // Send data to SMM.
   //
@@ -1485,6 +1571,7 @@ GetVariablePayloadSize (
   // Get data from SMM.
   //
   *VariablePayloadSize = SmmGetPayloadSize->VariablePayloadSize;
+  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmGetPayloadSize->VariablePayloadSize));
 
 Done:
   if (CommBuffer != NULL) {
@@ -1548,6 +1635,7 @@ GetRuntimeCacheInfo (
   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_RUNTIME_CACHE_INFO;
   SmmGetRuntimeCacheInfo              = (SMM_VARIABLE_COMMUNICATE_GET_RUNTIME_CACHE_INFO *)SmmVariableFunctionHeader->Data;
 
+  DEBUG((DEBUG_INFO,"Ranbir: GetRuntimeCacheInfo: %d\n", __LINE__));
   //
   // Send data to SMM.
   //
@@ -1620,6 +1708,8 @@ SendRuntimeVariableCacheContextToSmm (
   SmmVariableFunctionHeader           = (SMM_VARIABLE_COMMUNICATE_HEADER *)SmmCommunicateHeader->Data;
   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_INIT_RUNTIME_VARIABLE_CACHE_CONTEXT;
   SmmRuntimeVarCacheContext           = (SMM_VARIABLE_COMMUNICATE_RUNTIME_VARIABLE_CACHE_CONTEXT *)SmmVariableFunctionHeader->Data;
+
+  DEBUG((DEBUG_INFO,"Ranbir: SendRuntimeVariableCacheContextToSmm: %d\n", __LINE__));
 
   SmmRuntimeVarCacheContext->RuntimeHobCache      = mVariableRuntimeHobCacheBuffer;
   SmmRuntimeVarCacheContext->RuntimeVolatileCache = mVariableRuntimeVolatileCacheBuffer;
@@ -1704,6 +1794,7 @@ SmmVariableReady (
   // Allocate memory for variable communicate buffer.
   //
   Status = GetVariablePayloadSize (&mVariableBufferPayloadSize);
+  DEBUG((DEBUG_INFO,"Ranbir: mVariableBufferPayloadSize: %d\n", mVariableBufferPayloadSize));
   ASSERT_EFI_ERROR (Status);
   mVariableBufferSize = SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE + mVariableBufferPayloadSize;
   mVariableBuffer     = AllocateRuntimePool (mVariableBufferSize);

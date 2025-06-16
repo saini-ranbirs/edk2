@@ -127,6 +127,8 @@ AuthVariableLibInitialize (
   UINT8       CustomMode;
   UINT32      ListSize;
 
+  DEBUG ((DEBUG_INFO, "inside - AuthVariableLibInitialize() !\n"));
+
   if ((AuthVarLibContextIn == NULL) || (AuthVarLibContextOut == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
@@ -414,6 +416,8 @@ AuthVariableLibProcessVariable (
 {
   EFI_STATUS  Status;
 
+  DEBUG ((DEBUG_INFO, "Ranbir: AuthVariableLibProcessVariable IN \n"));
+
   if (CompareGuid (VendorGuid, &gEfiGlobalVariableGuid) && (StrCmp (VariableName, EFI_PLATFORM_KEY_NAME) == 0)) {
     Status = ProcessVarWithPk (VariableName, VendorGuid, Data, DataSize, Attributes, TRUE);
   } else if (CompareGuid (VendorGuid, &gEfiGlobalVariableGuid) && (StrCmp (VariableName, EFI_KEY_EXCHANGE_KEY_NAME) == 0)) {
@@ -431,6 +435,8 @@ AuthVariableLibProcessVariable (
   } else {
     Status = ProcessVariable (VariableName, VendorGuid, Data, DataSize, Attributes);
   }
+
+  DEBUG ((DEBUG_INFO, "Ranbir: AuthVariableLibProcessVariable OUT \n"));
 
   return Status;
 }

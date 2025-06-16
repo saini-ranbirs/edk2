@@ -2626,6 +2626,7 @@ VariableServiceSetVariable (
 
   AuthFormat = mVariableModuleGlobal->VariableGlobal.AuthFormat;
 
+  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable IN \n"));
   //
   // Check input parameters.
   //
@@ -2912,6 +2913,8 @@ Done:
         );
     }
   }
+
+  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable OUT \n"));
 
   return Status;
 }
@@ -3460,6 +3463,7 @@ VariableWriteServiceInitialize (
     mAuthContextIn.StructSize          = sizeof (AUTH_VAR_LIB_CONTEXT_IN);
     mAuthContextIn.MaxAuthVariableSize =  mVariableModuleGlobal->MaxAuthVariableSize -
                                          GetVariableHeaderSize (mVariableModuleGlobal->VariableGlobal.AuthFormat);
+    DEBUG ((DEBUG_INFO, "NOTICE - AuthVariableLibInitialize() called !\n"));
     Status = AuthVariableLibInitialize (&mAuthContextIn, &mAuthContextOut);
     if (!EFI_ERROR (Status)) {
       DEBUG ((DEBUG_INFO, "Variable driver will work with auth variable support!\n"));

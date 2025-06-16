@@ -40,6 +40,59 @@ STATIC EFI_HANDLE  mMmCommunicateHandle;
 //
 STATIC UINT32 mMmChannelId = 0;
 
+static void memdump(const void *src, UINTN count, void *dest);
+
+static void memdump(const void *src, UINTN count, void *dest)
+{
+#define BFR_DATA_LIMIT  16
+
+	const char *temp = src;
+	char *tmp = dest;
+	unsigned char bfr_data[BFR_DATA_LIMIT];
+	UINTN bfr_counter, bfr_counter_limit;
+	UINTN remaining = count, loop_count = 0;
+
+	DEBUG((DEBUG_INFO,"\nEDK2 - Data Size : %06lu", count));
+
+	while (remaining) {
+		bfr_counter = 0;
+
+		(remaining >= BFR_DATA_LIMIT) ?
+		    (bfr_counter_limit = BFR_DATA_LIMIT) :
+		    (bfr_counter_limit = remaining);
+
+		while (bfr_counter < bfr_counter_limit) {
+			bfr_data[bfr_counter] = *(temp + bfr_counter);
+			if (dest)
+				*(tmp + bfr_counter) = bfr_data[bfr_counter];
+			bfr_counter++;
+		}
+
+		/* For simplicity, fill rest with ZERO's if required */
+		while (bfr_counter < BFR_DATA_LIMIT) {
+			bfr_data[bfr_counter] = 0x00;
+			bfr_counter++;
+		}
+
+		if (loop_count < 68) {
+		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+			"%02x%02x %02x%02x %02x%02x %02x%02x "
+			"%02x%02x %02x%02x %02x%02x %02x%02x",
+			temp, count - remaining,
+			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
+			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
+			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
+			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
+		}
+
+		temp = temp + bfr_counter_limit;
+		remaining = remaining - bfr_counter_limit;
+		loop_count++;
+	}
+
+	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
+}
+
 /**
   Communicates with a registered handler.
 
@@ -152,6 +205,10 @@ MmCommunication2Communicate (
 
   // comm_size_address (not used, indicated by setting to zero)
   CommunicateArgs.Arg1 = 0;
+
+  memdump ((VOID *)mNsCommBuffMemRegion.VirtualBase, BufferSize, NULL);
+
+  DEBUG((DEBUG_INFO, "Ranbir: calling SbiMpxySendMessage: %d\n", __LINE__));
 
   // Call the Standalone MM environment.
   Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_COMMUNICATE,

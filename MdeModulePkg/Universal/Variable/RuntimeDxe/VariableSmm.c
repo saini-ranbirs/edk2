@@ -609,6 +609,7 @@ SmmVariableHandler (
       break;
 
     case SMM_VARIABLE_FUNCTION_SET_VARIABLE:
+      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_SET_VARIABLE\n"));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name)) {
         DEBUG ((DEBUG_ERROR, "SetVariable: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
