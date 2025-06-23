@@ -29,6 +29,11 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableNonVolatile.h"
 #include "VariableParsing.h"
 #include "VariableRuntimeCache.h"
+#include <Guid/SmmVariableCommon.h>
+
+extern UINT8 mVarCount;
+extern UINT8 mVarBuffer[45][700];
+extern UINT8 mVarCurr;
 
 VARIABLE_MODULE_GLOBAL  *mVariableModuleGlobal;
 
@@ -893,10 +898,12 @@ FindVariable (
                 mVariableModuleGlobal->VariableGlobal.AuthFormat
                 );
     if (!EFI_ERROR (Status)) {
+      DEBUG((DEBUG_INFO, "Variable EFI_FOUND\n"));
       return Status;
     }
   }
 
+  DEBUG((DEBUG_INFO, "Variable EFI_NOT_FOUND\n"));
   return EFI_NOT_FOUND;
 }
 
@@ -2402,6 +2409,16 @@ Done:
                                     configuration table.
 
 **/
+extern
+EFI_STATUS
+FindVariableRs (
+  IN     CHAR16                  *VariableName,
+  IN     EFI_GUID                *VendorGuid,
+  IN     BOOLEAN                 IgnoreRtCheck,
+  IN OUT VARIABLE_POINTER_TRACK  *PtrTrack,
+  IN     BOOLEAN                 AuthFormat
+  );
+
 EFI_STATUS
 EFIAPI
 VariableServiceGetVariable (
@@ -2415,6 +2432,7 @@ VariableServiceGetVariable (
   EFI_STATUS              Status;
   VARIABLE_POINTER_TRACK  Variable;
   UINTN                   VarDataSize;
+  SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
 
   if ((VariableName == NULL) || (VendorGuid == NULL) || (DataSize == NULL)) {
     return EFI_INVALID_PARAMETER;
@@ -2427,23 +2445,29 @@ VariableServiceGetVariable (
   AcquireLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
 
   Status = FindVariable (VariableName, VendorGuid, &Variable, &mVariableModuleGlobal->VariableGlobal, FALSE);
-  if (EFI_ERROR (Status) || (Variable.CurrPtr == NULL)) {
+  mVarCurr = 0;
+  Status = FindVariableRs (VariableName, VendorGuid, FALSE, &Variable, FALSE);
+  //if (EFI_ERROR (Status) || (Variable.CurrPtr == NULL)) {
+  if (EFI_ERROR (Status) || (mVarCurr >= mVarCount)) {
     goto Done;
   }
 
   //
   // Get data size
   //
-  VarDataSize = DataSizeOfVariable (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat);
-  ASSERT (VarDataSize != 0);
+  //VarDataSize = DataSizeOfVariable (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat);
+  pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+  VarDataSize = pSet2->DataSize;
+  //ASSERT (VarDataSize != 0);
 
-  if (*DataSize >= VarDataSize) {
+  if (VarDataSize && *DataSize >= VarDataSize) {
     if (Data == NULL) {
       Status = EFI_INVALID_PARAMETER;
       goto Done;
     }
 
-    CopyMem (Data, GetVariableDataPtr (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat), VarDataSize);
+    //CopyMem (Data, GetVariableDataPtr (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat), VarDataSize);
+    CopyMem (Data, (UINT8 *)pSet2->Name + pSet2->NameSize, VarDataSize);
 
     *DataSize = VarDataSize;
     UpdateVariableInfo (VariableName, VendorGuid, Variable.Volatile, TRUE, FALSE, FALSE, FALSE, &gVariableInfo);
@@ -2458,8 +2482,10 @@ VariableServiceGetVariable (
 
 Done:
   if ((Status == EFI_SUCCESS) || (Status == EFI_BUFFER_TOO_SMALL)) {
-    if ((Attributes != NULL) && (Variable.CurrPtr != NULL)) {
-      *Attributes = Variable.CurrPtr->Attributes;
+    /*if ((Attributes != NULL) && (Variable.CurrPtr != NULL)) {
+      *Attributes = Variable.CurrPtr->Attributes;*/
+    if ((Attributes != NULL) && (mVarCurr < mVarCount)) {
+      *Attributes = pSet2->Attributes;
     }
   }
 
@@ -2511,8 +2537,11 @@ VariableServiceGetNextVariableName (
   BOOLEAN                AuthFormat;
   VARIABLE_HEADER        *VariablePtr;
   VARIABLE_STORE_HEADER  *VariableStoreHeader[VariableStoreTypeMax];
+  static UINTN CallCount = 0;
 
+  CallCount++;
   if ((VariableNameSize == NULL) || (VariableName == NULL) || (VendorGuid == NULL)) {
+    CallCount--;
     return EFI_INVALID_PARAMETER;
   }
 
@@ -2527,6 +2556,7 @@ VariableServiceGetNextVariableName (
     // Null-terminator is not found in the first VariableNameSize bytes of the input VariableName buffer,
     // follow spec to return EFI_INVALID_PARAMETER.
     //
+    CallCount--;
     return EFI_INVALID_PARAMETER;
   }
 
@@ -2549,6 +2579,24 @@ VariableServiceGetNextVariableName (
               AuthFormat
               );
   if (!EFI_ERROR (Status)) {
+#if 1
+    SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
+
+    pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+    VarNameSize = pSet2->NameSize;
+    ASSERT (VarNameSize != 0);
+    if (VarNameSize <= *VariableNameSize) {
+      CopyMem (
+	VariableName,
+	pSet2->Name,
+	VarNameSize
+	);
+      CopyMem (
+	VendorGuid,
+	(const void *)pSet2,
+	sizeof (EFI_GUID)
+	);
+#else
     VarNameSize = NameSizeOfVariable (VariablePtr, AuthFormat);
     ASSERT (VarNameSize != 0);
     if (VarNameSize <= *VariableNameSize) {
@@ -2562,6 +2610,7 @@ VariableServiceGetNextVariableName (
         GetVendorGuidPtr (VariablePtr, AuthFormat),
         sizeof (EFI_GUID)
         );
+#endif
       Status = EFI_SUCCESS;
     } else {
       Status = EFI_BUFFER_TOO_SMALL;
@@ -2570,6 +2619,7 @@ VariableServiceGetNextVariableName (
     *VariableNameSize = VarNameSize;
   }
 
+  DEBUG ((DEBUG_INFO, "Ranbir: CallCount = %d Status2 = %d NameSize = %d\n", CallCount, Status, *VariableNameSize));
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }

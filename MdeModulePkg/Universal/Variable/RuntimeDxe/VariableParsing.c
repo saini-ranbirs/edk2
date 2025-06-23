@@ -8,6 +8,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
 #include "VariableParsing.h"
+#include <Guid/SmmVariableCommon.h>
 
 /**
 
@@ -459,6 +460,8 @@ VariableCompareTimeStampInternal (
   @retval          EFI_SUCCESS         Variable found successfully
   @retval          EFI_NOT_FOUND       Variable not found
 **/
+extern void memdump(const void *src, UINTN count, char *name);
+
 EFI_STATUS
 FindVariableEx (
   IN     CHAR16                  *VariableName,
@@ -470,6 +473,7 @@ FindVariableEx (
 {
   VARIABLE_HEADER  *InDeletedVariable;
   VOID             *Point;
+  VARIABLE_HEADER  *Next2NextVarHdrPtr;
 
   PtrTrack->InDeletedTransitionPtr = NULL;
 
@@ -483,6 +487,12 @@ FindVariableEx (
         ; PtrTrack->CurrPtr = GetNextVariablePtr (PtrTrack->CurrPtr, AuthFormat)
         )
   {
+    DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d initiating memdump %d %d\n", __LINE__, PtrTrack->CurrPtr->NameSize, PtrTrack->CurrPtr->DataSize));
+    memdump(PtrTrack->CurrPtr, sizeof(VARIABLE_HEADER) + PtrTrack->CurrPtr->NameSize + PtrTrack->CurrPtr->DataSize, "H1");
+    Next2NextVarHdrPtr = GetNextVariablePtr (PtrTrack->CurrPtr, AuthFormat);
+    if (IsValidVariableHeader (Next2NextVarHdrPtr, PtrTrack->EndPtr)) {
+      memdump(Next2NextVarHdrPtr, sizeof(VARIABLE_HEADER) + Next2NextVarHdrPtr->NameSize + Next2NextVarHdrPtr->DataSize, "H2");
+    }
     if ((PtrTrack->CurrPtr->State == VAR_ADDED) ||
         (PtrTrack->CurrPtr->State == (VAR_IN_DELETED_TRANSITION & VAR_ADDED))
         )
@@ -491,8 +501,10 @@ FindVariableEx (
         if (VariableName[0] == 0) {
           if (PtrTrack->CurrPtr->State == (VAR_IN_DELETED_TRANSITION & VAR_ADDED)) {
             InDeletedVariable = PtrTrack->CurrPtr;
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d\n", __LINE__));
           } else {
             PtrTrack->InDeletedTransitionPtr = InDeletedVariable;
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d PtrTrack->CurrPtr = 0x%x\n", __LINE__, PtrTrack->CurrPtr));
             return EFI_SUCCESS;
           }
         } else {
@@ -503,11 +515,18 @@ FindVariableEx (
             if (CompareMem (VariableName, Point, NameSizeOfVariable (PtrTrack->CurrPtr, AuthFormat)) == 0) {
               if (PtrTrack->CurrPtr->State == (VAR_IN_DELETED_TRANSITION & VAR_ADDED)) {
                 InDeletedVariable = PtrTrack->CurrPtr;
+                DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d PtrTrack->CurrPtr = 0x%x\n", __LINE__, PtrTrack->CurrPtr));
               } else {
                 PtrTrack->InDeletedTransitionPtr = InDeletedVariable;
+                DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d PtrTrack->CurrPtr = 0x%x\n", __LINE__, PtrTrack->CurrPtr));
                 return EFI_SUCCESS;
               }
+            } else {
+              DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx Variable Name Mismatch %d\n", __LINE__));
             }
+          } else {
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx Vendor GUID Mismatch %d\n", __LINE__));
+            memdump(GetVendorGuidPtr (PtrTrack->CurrPtr, AuthFormat), 16, "1");
           }
         }
       }
@@ -515,8 +534,117 @@ FindVariableEx (
   }
 
   PtrTrack->CurrPtr = InDeletedVariable;
+  DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d Status = %d PtrTrack->CurrPtr = 0x%x\n", __LINE__, (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS, PtrTrack->CurrPtr));
   return (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS;
 }
+
+extern UINT8 mVarCount;
+extern UINT8 mVarBuffer[45][700];
+extern UINT8 mVarCurr;
+
+EFI_STATUS
+FindVariableRs (
+  IN     CHAR16                  *VariableName,
+  IN     EFI_GUID                *VendorGuid,
+  IN     BOOLEAN                 IgnoreRtCheck,
+  IN OUT VARIABLE_POINTER_TRACK  *PtrTrack,
+  IN     BOOLEAN                 AuthFormat
+  )
+{
+  //return EFI_NOT_FOUND;
+  while (mVarCurr < mVarCount)
+  {
+    {
+      if (1) {
+        if (VariableName[0] == 0) {
+          if (0) {
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs L%d\n", __LINE__));
+          } else {
+            //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+            return EFI_SUCCESS;
+          }
+        } else {
+          SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
+
+          pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+          //memdump(pSet2, 16, "1");
+          if (CompareGuid (VendorGuid, (const GUID *)pSet2)) {
+            ASSERT ((pSet2->NameSize) != 0);
+            //memdump(pSet2->Name, pSet2->NameSize, "1");
+            if (CompareMem (VariableName, pSet2->Name, pSet2->NameSize) == 0) {
+              if (0) {
+                DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+              } else {
+                //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+                return EFI_SUCCESS;
+              }
+            } else {
+              //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs Variable Name Mismatch L%d\n", __LINE__));
+            }
+          } else {
+            //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRs Vendor GUID Mismatch L%d\n", __LINE__));
+          }
+        }
+      }
+    }
+    mVarCurr++;
+  }
+
+  return (mVarCurr >= mVarCount) ? EFI_NOT_FOUND : EFI_SUCCESS;
+}
+
+#if 0
+EFI_STATUS
+FindVariableRt (
+  IN     CHAR16                  *VariableName,
+  IN     EFI_GUID                *VendorGuid,
+  IN     BOOLEAN                 IgnoreRtCheck,
+  IN OUT VARIABLE_POINTER_TRACK  *PtrTrack,
+  IN     BOOLEAN                 AuthFormat
+  )
+{
+  //return EFI_NOT_FOUND;
+  while (mVarCurr < mVarCount)
+  {
+    {
+      if (1) {
+        if (VariableName[0] == 0) {
+          if (0) {
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt L%d\n", __LINE__));
+          } else {
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+            return EFI_SUCCESS;
+          }
+        } else {
+          SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
+
+          pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+          memdump(pSet2, 16, "1");
+          if (CompareGuid (VendorGuid, (const GUID *)pSet2)) {
+            ASSERT ((pSet2->NameSize) != 0);
+            memdump(pSet2->Name, pSet2->NameSize, "1");
+            if (CompareMem (VariableName, pSet2->Name, pSet2->NameSize) == 0) {
+              if (0) {
+                DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+              } else {
+                DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+                return EFI_SUCCESS;
+              }
+            } else {
+              DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt Variable Name Mismatch L%d\n", __LINE__));
+            }
+          } else {
+            DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRt Vendor GUID Mismatch L%d\n", __LINE__));
+          }
+        }
+      }
+    }
+    mVarCurr++;
+  }
+
+  return (mVarCurr >= mVarCount) ? EFI_NOT_FOUND : EFI_SUCCESS;
+}
+#endif
 
 /**
   This code finds the next available variable.
@@ -552,8 +680,9 @@ VariableServiceGetNextVariableInternal (
   EFI_STATUS              Status;
   VARIABLE_STORE_TYPE     StoreType;
   VARIABLE_POINTER_TRACK  Variable;
-  VARIABLE_POINTER_TRACK  VariableInHob;
-  VARIABLE_POINTER_TRACK  VariablePtrTrack;
+  //VARIABLE_POINTER_TRACK  VariableInHob;
+  //VARIABLE_POINTER_TRACK  VariablePtrTrack;
+  UINTN LoopCount = 0;
 
   Status = EFI_NOT_FOUND;
 
@@ -566,6 +695,7 @@ VariableServiceGetNextVariableInternal (
   // Check if the variable exists in the given variable store list
   for (StoreType = (VARIABLE_STORE_TYPE)0; StoreType < VariableStoreTypeMax; StoreType++) {
     if (VariableStoreList[StoreType] == NULL) {
+      DEBUG ((DEBUG_INFO, "Ranbir: L%d StoreType = %d is NULL\n", __LINE__, StoreType));
       continue;
     }
 
@@ -573,13 +703,23 @@ VariableServiceGetNextVariableInternal (
     Variable.EndPtr   = GetEndPointer (VariableStoreList[StoreType]);
     Variable.Volatile = (BOOLEAN)(StoreType == VariableStoreTypeVolatile);
 
-    Status = FindVariableEx (VariableName, VendorGuid, FALSE, &Variable, AuthFormat);
+    /*DEBUG ((DEBUG_INFO, "Ranbir: L%d StoreType = %d initiating memdump\n", __LINE__, StoreType));
+    if ((Variable.EndPtr - Variable.StartPtr) > 0)
+      memdump(Variable.StartPtr, Variable.EndPtr - Variable.StartPtr + 1, "ALL");
+    else
+      memdump(Variable.StartPtr, Variable.StartPtr - Variable.EndPtr + 1, "ALL");*/
+
+    mVarCurr = 0;
+    Status = FindVariableRs (VariableName, VendorGuid, FALSE, &Variable, AuthFormat);
+    //Status = FindVariableEx (VariableName, VendorGuid, FALSE, &Variable, AuthFormat);
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d StoreType = %d\n", __LINE__, Status, StoreType));
+    DEBUG ((DEBUG_INFO, "Ranbir: Variable.StartPtr = 0x%x Variable.CurrPtr = 0x%x Variable.EndPtr = 0x%x\n", Variable.StartPtr, Variable.CurrPtr, Variable.EndPtr));
     if (!EFI_ERROR (Status)) {
       break;
     }
   }
 
-  if ((Variable.CurrPtr == NULL) || EFI_ERROR (Status)) {
+  if (EFI_ERROR (Status)) {
     //
     // For VariableName is an empty string, FindVariableEx() will try to find and return
     // the first qualified variable, and if FindVariableEx() returns error (EFI_NOT_FOUND)
@@ -592,8 +732,10 @@ VariableServiceGetNextVariableInternal (
       // there is no way to get next variable, follow spec to return EFI_INVALID_PARAMETER.
       //
       Status = EFI_INVALID_PARAMETER;
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d ", __LINE__, Status)); // Not coming here
     }
 
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
     goto Done;
   }
 
@@ -601,19 +743,30 @@ VariableServiceGetNextVariableInternal (
     //
     // If variable name is not empty, get next variable.
     //
-    Variable.CurrPtr = GetNextVariablePtr (Variable.CurrPtr, AuthFormat);
+    //Variable.CurrPtr = GetNextVariablePtr (Variable.CurrPtr, AuthFormat);
+    mVarCurr++;
+    if (mVarCurr >= mVarCount)
+      Status = EFI_NOT_FOUND;
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    goto Done;
   }
 
+  goto Done;
   while (TRUE) {
     //
     // Switch to the next variable store if needed
     //
+    DEBUG ((DEBUG_INFO, "Ranbir: Checking IsValidVariableHeader L%d LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, LoopCount, Variable.CurrPtr));
     while (!IsValidVariableHeader (Variable.CurrPtr, Variable.EndPtr)) {
+      DEBUG ((DEBUG_INFO, "Ranbir: L%d LoopCount = %d\n", __LINE__, LoopCount));
+      LoopCount++;
       //
       // Find current storage index
       //
       for (StoreType = (VARIABLE_STORE_TYPE)0; StoreType < VariableStoreTypeMax; StoreType++) {
+        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI StoreType L%d = %d LoopCount = %d\n", __LINE__, StoreType, LoopCount));
         if ((VariableStoreList[StoreType] != NULL) && (Variable.StartPtr == GetStartPointer (VariableStoreList[StoreType]))) {
+          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
           break;
         }
       }
@@ -624,6 +777,7 @@ VariableServiceGetNextVariableInternal (
       //
       for (StoreType++; StoreType < VariableStoreTypeMax; StoreType++) {
         if (VariableStoreList[StoreType] != NULL) {
+          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
           break;
         }
       }
@@ -635,12 +789,14 @@ VariableServiceGetNextVariableInternal (
       //
       if (StoreType == VariableStoreTypeMax) {
         Status = EFI_NOT_FOUND;
+        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
         goto Done;
       }
 
       Variable.StartPtr = GetStartPointer (VariableStoreList[StoreType]);
       Variable.EndPtr   = GetEndPointer (VariableStoreList[StoreType]);
       Variable.CurrPtr  = Variable.StartPtr;
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
     }
 
     //
@@ -648,6 +804,7 @@ VariableServiceGetNextVariableInternal (
     //
     if ((Variable.CurrPtr->State == VAR_ADDED) || (Variable.CurrPtr->State == (VAR_IN_DELETED_TRANSITION & VAR_ADDED))) {
       if (!AtRuntime () || ((Variable.CurrPtr->Attributes & EFI_VARIABLE_RUNTIME_ACCESS) != 0)) {
+#if 0
         if (Variable.CurrPtr->State == (VAR_IN_DELETED_TRANSITION & VAR_ADDED)) {
           //
           // If it is a IN_DELETED_TRANSITION variable,
@@ -690,9 +847,10 @@ VariableServiceGetNextVariableInternal (
             continue;
           }
         }
-
+#endif
         *VariablePtr = Variable.CurrPtr;
         Status       = EFI_SUCCESS;
+        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
         goto Done;
       }
     }

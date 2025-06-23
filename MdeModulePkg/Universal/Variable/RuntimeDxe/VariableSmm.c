@@ -40,6 +40,16 @@ BOOLEAN  mAtRuntime              = FALSE;
 UINT8    *mVariableBufferPayload = NULL;
 UINTN    mVariableBufferPayloadSize;
 
+struct VarCache {
+	SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE set;
+	UINT8 *data;
+};
+
+//static struct VarCache mVarCache[45];
+UINT8 mVarCount = 0;
+UINT8 mVarBuffer[45][700];
+UINT8 mVarCurr;
+
 /**
   SecureBoot Hook for SetVariable.
 
@@ -424,6 +434,56 @@ SmmVariableGetStatistics (
   return EFI_SUCCESS;
 }
 
+void memdump(const void *src, UINTN count, char *name);
+
+void memdump(const void *src, UINTN count, char *name)
+{
+#define BFR_DATA_LIMIT  16
+
+	const char *temp = src;
+	unsigned char bfr_data[BFR_DATA_LIMIT];
+	UINTN bfr_counter, bfr_counter_limit;
+	UINTN remaining = count, loop_count = 0;
+
+	DEBUG((DEBUG_INFO,"\nSMM %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
+
+	while (remaining) {
+		bfr_counter = 0;
+
+		(remaining >= BFR_DATA_LIMIT) ?
+		    (bfr_counter_limit = BFR_DATA_LIMIT) :
+		    (bfr_counter_limit = remaining);
+
+		while (bfr_counter < bfr_counter_limit) {
+			bfr_data[bfr_counter] = *(temp + bfr_counter);
+			bfr_counter++;
+		}
+
+		/* For simplicity, fill rest with ZERO's if required */
+		while (bfr_counter < BFR_DATA_LIMIT) {
+			bfr_data[bfr_counter] = 0x00;
+			bfr_counter++;
+		}
+
+		if (loop_count < 45) {
+		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+			"%02x%02x %02x%02x %02x%02x %02x%02x "
+			"%02x%02x %02x%02x %02x%02x %02x%02x",
+			temp, count - remaining,
+			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
+			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
+			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
+			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
+		}
+
+		temp = temp + bfr_counter_limit;
+		remaining = remaining - bfr_counter_limit;
+		loop_count++;
+	}
+
+	DEBUG((DEBUG_INFO,"\n%p: %06lu\n", temp, count - remaining));
+}
+
 /**
   Communication service SMI Handler entry.
 
@@ -477,6 +537,7 @@ SmmVariableHandler (
   UINTN                                                    CommBufferPayloadSize;
   UINTN                                                    TempCommBufferSize;
 
+  DEBUG ((DEBUG_INFO, "SmmVariableHandler: IN\n"));
   //
   // If input is invalid, stop processing this SMI
   //
@@ -503,8 +564,10 @@ SmmVariableHandler (
   }
 
   SmmVariableFunctionHeader = (SMM_VARIABLE_COMMUNICATE_HEADER *)CommBuffer;
+  DEBUG ((DEBUG_INFO, "SmmVariableHandler: SmmVariableFunctionHeader->Function = %d\n", SmmVariableFunctionHeader->Function));
   switch (SmmVariableFunctionHeader->Function) {
     case SMM_VARIABLE_FUNCTION_GET_VARIABLE:
+      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_VARIABLE\n"));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name)) {
         DEBUG ((DEBUG_ERROR, "GetVariable: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -514,6 +577,7 @@ SmmVariableHandler (
       // Copy the input communicate buffer payload to pre-allocated SMM variable buffer payload.
       //
       CopyMem (mVariableBufferPayload, SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+      //memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "IN");
       SmmVariableHeader = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)mVariableBufferPayload;
       if (((UINTN)(~0) - SmmVariableHeader->DataSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name)) ||
           ((UINTN)(~0) - SmmVariableHeader->NameSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name) + SmmVariableHeader->DataSize))
@@ -558,10 +622,48 @@ SmmVariableHandler (
                  &SmmVariableHeader->DataSize,
                  (UINT8 *)SmmVariableHeader->Name + SmmVariableHeader->NameSize
                  );
-      CopyMem (SmmVariableFunctionHeader->Data, mVariableBufferPayload, CommBufferPayloadSize);
+#if 0
+      {
+	UINT8 Count = mVarCount;
+
+	if (Count) {
+		SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet1, *pSet2;
+
+		/* Check if same Vendor Guid and Variable Name pre-exists */
+		while (Count >= 1) {
+			if (CompareMem (SmmVariableFunctionHeader->Data,
+					&mVarBuffer[Count - 1], sizeof(EFI_GUID)) == 0) {
+				pSet1 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data;
+				pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[Count - 1];
+
+				if ((pSet1->NameSize == pSet2->NameSize) &&
+				    (CompareMem (pSet1->Name, pSet2->Name,
+						 pSet1->NameSize) == 0)) {
+					/* Match found, update the existing data */
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[Count - 1], CommBufferPayloadSize);
+					break;
+				}
+			}
+			Count--;
+		};
+		if (Count >= 1) {
+			DEBUG ((DEBUG_INFO, "Ranbir: Variable Found Status = %d \n", Status));
+			//Status = EFI_SUCCESS;
+		} else {
+			DEBUG ((DEBUG_INFO, "Ranbir: Variable Not Found Status = %d \n", Status));
+			//Status = EFI_NOT_FOUND;
+		}
+	}
+      }
+#endif
+      CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[mVarCurr], CommBufferPayloadSize);
+      //memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
+      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
       break;
 
     case SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME:
+      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME\n"));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_GET_NEXT_VARIABLE_NAME, Name)) {
         DEBUG ((DEBUG_ERROR, "GetNextVariableName: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -571,7 +673,10 @@ SmmVariableHandler (
       // Copy the input communicate buffer payload to pre-allocated SMM variable buffer payload.
       //
       CopyMem (mVariableBufferPayload, SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+      memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "IN");
       GetNextVariableName = (SMM_VARIABLE_COMMUNICATE_GET_NEXT_VARIABLE_NAME *)mVariableBufferPayload;
+      memdump(&GetNextVariableName->Guid, 16, "V");
+      memdump(GetNextVariableName->Name, 46, "N");
       if ((UINTN)(~0) - GetNextVariableName->NameSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_GET_NEXT_VARIABLE_NAME, Name)) {
         //
         // Prevent InfoSize overflow happen
@@ -605,7 +710,43 @@ SmmVariableHandler (
                  GetNextVariableName->Name,
                  &GetNextVariableName->Guid
                  );
+
+#if 0
+      {
+	UINT8 Count = mVarCount;
+	static BOOLEAN bFirstTime = TRUE;
+
+	if (Count && bFirstTime) {
+		/* Check if same Vendor Guid and Variable Name pre-exists */
+		while (Count) {
+			memdump(&mVarBuffer[Count - 1], 16*10, "UCACHE");
+#if 0
+			SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
+
+			if (CompareMem (&GetNextVariableName->Guid,
+					&mVarBuffer[Count - 1], sizeof(EFI_GUID)) == 0) {
+				pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[Count - 1];
+
+				if ((pSet1->NameSize == pSet2->NameSize) &&
+				    (CompareMem (pSet1->Name, pSet2->Name,
+						 pSet1->NameSize) == 0)) {
+					/* Match found, update the existing data */
+					DEBUG ((DEBUG_INFO, "Ranbir: Variable Found \n"));
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[Count - 1], CommBufferPayloadSize);
+					break;
+				}
+			}
+#endif
+			Count--;
+		};
+		bFirstTime = FALSE;
+	}
+      }
+#endif
+
       CopyMem (SmmVariableFunctionHeader->Data, mVariableBufferPayload, CommBufferPayloadSize);
+      memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
       break;
 
     case SMM_VARIABLE_FUNCTION_SET_VARIABLE:
@@ -657,6 +798,45 @@ SmmVariableHandler (
         goto EXIT;
       }
 
+      memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "SET");
+#if 1
+      {
+	UINT8 Count = mVarCount;
+
+	if (Count) {
+		SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet1, *pSet2;
+
+		/* Check if same Vendor Guid and Variable Name pre-exists */
+		while (Count) {
+			if (CompareMem (SmmVariableFunctionHeader->Data,
+					&mVarBuffer[Count - 1], sizeof(EFI_GUID)) == 0) {
+				pSet1 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data;
+				pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[Count - 1];
+
+				if ((pSet1->NameSize == pSet2->NameSize) &&
+				    (CompareMem (pSet1->Name, pSet2->Name,
+						 pSet1->NameSize) == 0)) {
+					/* Match found, update the existing data */
+					DEBUG ((DEBUG_INFO, "Ranbir: Update Existing Variable, At Count = %d\n", Count));
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					CopyMem (&mVarBuffer[Count - 1], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+					//DEBUG ((DEBUG_INFO, "Ranbir: Existing Variable - New Data\n"));
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					break;
+				}
+			}
+			Count--;
+		};
+	}
+
+	if (!Count) {
+		CopyMem (&mVarBuffer[mVarCount], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+		//memdump(&mVarBuffer[mVarCount], CommBufferPayloadSize, "NCACHE");
+		mVarCount++;
+		DEBUG ((DEBUG_INFO, "Ranbir: Added New Variable with Attribues = 0x%x, Net Count = %d\n", ((SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data)->Attributes, mVarCount));
+	}
+      }
+#endif
       Status = VariableServiceSetVariable (
                  SmmVariableHeader->Name,
                  &SmmVariableHeader->Guid,
@@ -664,6 +844,9 @@ SmmVariableHandler (
                  SmmVariableHeader->DataSize,
                  (UINT8 *)SmmVariableHeader->Name + SmmVariableHeader->NameSize
                  );
+      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->Attributes = %d\n", SmmVariableHeader->Attributes));
+      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->NameSize = %d\n", SmmVariableHeader->NameSize));
+      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
       break;
 
     case SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO:
@@ -683,6 +866,7 @@ SmmVariableHandler (
       break;
 
     case SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE:
+      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE\n"));
       if (CommBufferPayloadSize < sizeof (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE)) {
         DEBUG ((DEBUG_ERROR, "GetPayloadSize: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -694,6 +878,7 @@ SmmVariableHandler (
       break;
 
     case SMM_VARIABLE_FUNCTION_READY_TO_BOOT:
+      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_READY_TO_BOOT\n"));
       if (AtRuntime ()) {
         Status = EFI_UNSUPPORTED;
         break;
@@ -995,6 +1180,7 @@ EXIT:
 
   SmmVariableFunctionHeader->ReturnStatus = Status;
 
+  DEBUG ((DEBUG_INFO, "SmmVariableHandler: OUT\n"));
   return EFI_SUCCESS;
 }
 
