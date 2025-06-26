@@ -31,6 +31,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableRuntimeCache.h"
 #include <Guid/SmmVariableCommon.h>
 
+#define ENABLE_RS_SVA  1
+
 extern UINT8 mVarCount;
 extern UINT8 mVarBuffer[45][700];
 extern UINT8 mVarCurr;
@@ -2411,12 +2413,9 @@ Done:
 **/
 extern
 EFI_STATUS
-FindVariableRs (
-  IN     CHAR16                  *VariableName,
-  IN     EFI_GUID                *VendorGuid,
-  IN     BOOLEAN                 IgnoreRtCheck,
-  IN OUT VARIABLE_POINTER_TRACK  *PtrTrack,
-  IN     BOOLEAN                 AuthFormat
+FindVariableRS (
+  IN CHAR16    *VariableName,
+  IN EFI_GUID  *VendorGuid
   );
 
 EFI_STATUS
@@ -2428,11 +2427,11 @@ VariableServiceGetVariable (
   IN OUT  UINTN     *DataSize,
   OUT     VOID      *Data OPTIONAL
   )
+#if !ENABLE_RS_SVA
 {
   EFI_STATUS              Status;
   VARIABLE_POINTER_TRACK  Variable;
   UINTN                   VarDataSize;
-  SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
 
   if ((VariableName == NULL) || (VendorGuid == NULL) || (DataSize == NULL)) {
     return EFI_INVALID_PARAMETER;
@@ -2445,29 +2444,23 @@ VariableServiceGetVariable (
   AcquireLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
 
   Status = FindVariable (VariableName, VendorGuid, &Variable, &mVariableModuleGlobal->VariableGlobal, FALSE);
-  mVarCurr = 0;
-  Status = FindVariableRs (VariableName, VendorGuid, FALSE, &Variable, FALSE);
-  //if (EFI_ERROR (Status) || (Variable.CurrPtr == NULL)) {
-  if (EFI_ERROR (Status) || (mVarCurr >= mVarCount)) {
+  if (EFI_ERROR (Status) || (Variable.CurrPtr == NULL)) {
     goto Done;
   }
 
   //
   // Get data size
   //
-  //VarDataSize = DataSizeOfVariable (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat);
-  pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
-  VarDataSize = pSet2->DataSize;
-  //ASSERT (VarDataSize != 0);
+  VarDataSize = DataSizeOfVariable (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat);
+  ASSERT (VarDataSize != 0);
 
-  if (VarDataSize && *DataSize >= VarDataSize) {
+  if (*DataSize >= VarDataSize) {
     if (Data == NULL) {
       Status = EFI_INVALID_PARAMETER;
       goto Done;
     }
 
-    //CopyMem (Data, GetVariableDataPtr (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat), VarDataSize);
-    CopyMem (Data, (UINT8 *)pSet2->Name + pSet2->NameSize, VarDataSize);
+    CopyMem (Data, GetVariableDataPtr (Variable.CurrPtr, mVariableModuleGlobal->VariableGlobal.AuthFormat), VarDataSize);
 
     *DataSize = VarDataSize;
     UpdateVariableInfo (VariableName, VendorGuid, Variable.Volatile, TRUE, FALSE, FALSE, FALSE, &gVariableInfo);
@@ -2482,16 +2475,71 @@ VariableServiceGetVariable (
 
 Done:
   if ((Status == EFI_SUCCESS) || (Status == EFI_BUFFER_TOO_SMALL)) {
-    /*if ((Attributes != NULL) && (Variable.CurrPtr != NULL)) {
-      *Attributes = Variable.CurrPtr->Attributes;*/
-    if ((Attributes != NULL) && (mVarCurr < mVarCount)) {
-      *Attributes = pSet2->Attributes;
+    if ((Attributes != NULL) && (Variable.CurrPtr != NULL)) {
+      *Attributes = Variable.CurrPtr->Attributes;
     }
   }
 
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }
+#else
+{
+  EFI_STATUS                                Status;
+  UINTN                                     VarDataSize;
+  SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE  *pSVCAVar;
+
+  if ((VariableName == NULL) || (VendorGuid == NULL) || (DataSize == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (VariableName[0] == 0) {
+    return EFI_NOT_FOUND;
+  }
+
+  AcquireLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
+
+  mVarCurr = 0;
+  Status = FindVariableRS (VariableName, VendorGuid);
+  if (EFI_ERROR (Status) || (mVarCurr >= mVarCount)) {
+    goto Done;
+  }
+
+  //
+  // Get data size
+  //
+  pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+  VarDataSize = pSVCAVar->DataSize;
+
+  if (VarDataSize && *DataSize >= VarDataSize) {
+    if (Data == NULL) {
+      Status = EFI_INVALID_PARAMETER;
+      goto Done;
+    }
+
+    CopyMem (Data, (UINT8 *)pSVCAVar->Name + pSVCAVar->NameSize, VarDataSize);
+
+    *DataSize = VarDataSize;
+
+    Status = EFI_SUCCESS;
+    goto Done;
+  } else {
+    *DataSize = VarDataSize;
+    Status    = EFI_BUFFER_TOO_SMALL;
+    goto Done;
+  }
+
+Done:
+  if ((Status == EFI_SUCCESS) || (Status == EFI_BUFFER_TOO_SMALL)) {
+    if ((Attributes != NULL) && (mVarCurr < mVarCount)) {
+      *Attributes = pSVCAVar->Attributes;
+    }
+  }
+
+  ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
+  return Status;
+}
+#endif
 
 /**
 
@@ -2537,7 +2585,7 @@ VariableServiceGetNextVariableName (
   BOOLEAN                AuthFormat;
   VARIABLE_HEADER        *VariablePtr;
   VARIABLE_STORE_HEADER  *VariableStoreHeader[VariableStoreTypeMax];
-  static UINTN CallCount = 0;
+  static UINTN           CallCount = 0;
 
   CallCount++;
   if ((VariableNameSize == NULL) || (VariableName == NULL) || (VendorGuid == NULL)) {
@@ -2579,24 +2627,7 @@ VariableServiceGetNextVariableName (
               AuthFormat
               );
   if (!EFI_ERROR (Status)) {
-#if 1
-    SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet2;
-
-    pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
-    VarNameSize = pSet2->NameSize;
-    ASSERT (VarNameSize != 0);
-    if (VarNameSize <= *VariableNameSize) {
-      CopyMem (
-	VariableName,
-	pSet2->Name,
-	VarNameSize
-	);
-      CopyMem (
-	VendorGuid,
-	(const void *)pSet2,
-	sizeof (EFI_GUID)
-	);
-#else
+#if !ENABLE_RS_SVA
     VarNameSize = NameSizeOfVariable (VariablePtr, AuthFormat);
     ASSERT (VarNameSize != 0);
     if (VarNameSize <= *VariableNameSize) {
@@ -2608,6 +2639,23 @@ VariableServiceGetNextVariableName (
       CopyMem (
         VendorGuid,
         GetVendorGuidPtr (VariablePtr, AuthFormat),
+        sizeof (EFI_GUID)
+        );
+#else
+    SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE  *pSVCAVar;
+
+    pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+    VarNameSize = pSVCAVar->NameSize;
+    ASSERT (VarNameSize != 0);
+    if (VarNameSize <= *VariableNameSize) {
+      CopyMem (
+        VariableName,
+        pSVCAVar->Name,
+        VarNameSize
+        );
+      CopyMem (
+        VendorGuid,
+        (const void *)pSVCAVar,
         sizeof (EFI_GUID)
         );
 #endif

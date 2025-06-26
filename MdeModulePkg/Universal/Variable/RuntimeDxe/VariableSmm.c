@@ -622,41 +622,7 @@ SmmVariableHandler (
                  &SmmVariableHeader->DataSize,
                  (UINT8 *)SmmVariableHeader->Name + SmmVariableHeader->NameSize
                  );
-#if 0
-      {
-	UINT8 Count = mVarCount;
 
-	if (Count) {
-		SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet1, *pSet2;
-
-		/* Check if same Vendor Guid and Variable Name pre-exists */
-		while (Count >= 1) {
-			if (CompareMem (SmmVariableFunctionHeader->Data,
-					&mVarBuffer[Count - 1], sizeof(EFI_GUID)) == 0) {
-				pSet1 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data;
-				pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[Count - 1];
-
-				if ((pSet1->NameSize == pSet2->NameSize) &&
-				    (CompareMem (pSet1->Name, pSet2->Name,
-						 pSet1->NameSize) == 0)) {
-					/* Match found, update the existing data */
-					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
-					CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[Count - 1], CommBufferPayloadSize);
-					break;
-				}
-			}
-			Count--;
-		};
-		if (Count >= 1) {
-			DEBUG ((DEBUG_INFO, "Ranbir: Variable Found Status = %d \n", Status));
-			//Status = EFI_SUCCESS;
-		} else {
-			DEBUG ((DEBUG_INFO, "Ranbir: Variable Not Found Status = %d \n", Status));
-			//Status = EFI_NOT_FOUND;
-		}
-	}
-      }
-#endif
       CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[mVarCurr], CommBufferPayloadSize);
       //memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
       DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
