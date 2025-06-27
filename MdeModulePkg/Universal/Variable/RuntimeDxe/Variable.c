@@ -29,6 +29,15 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableNonVolatile.h"
 #include "VariableParsing.h"
 #include "VariableRuntimeCache.h"
+#include <Guid/SmmVariableCommon.h>
+
+#define ENABLE_RS_SVA  1
+
+#if ENABLE_RS_SVA
+extern UINT8 mVarCount;
+extern UINT8 mVarBuffer[45][700];
+extern UINT8 mVarCurr;
+#endif
 
 VARIABLE_MODULE_GLOBAL  *mVariableModuleGlobal;
 
@@ -2404,6 +2413,15 @@ Done:
                                     configuration table.
 
 **/
+#if ENABLE_RS_SVA
+extern
+EFI_STATUS
+FindVariableRS (
+  IN CHAR16    *VariableName,
+  IN EFI_GUID  *VendorGuid
+  );
+#endif
+
 EFI_STATUS
 EFIAPI
 VariableServiceGetVariable (
@@ -2413,6 +2431,7 @@ VariableServiceGetVariable (
   IN OUT  UINTN     *DataSize,
   OUT     VOID      *Data OPTIONAL
   )
+#if !ENABLE_RS_SVA
 {
   EFI_STATUS              Status;
   VARIABLE_POINTER_TRACK  Variable;
@@ -2468,6 +2487,63 @@ Done:
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }
+#else
+{
+  EFI_STATUS                                Status;
+  UINTN                                     VarDataSize;
+  SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE  *pSVCAVar;
+
+  if ((VariableName == NULL) || (VendorGuid == NULL) || (DataSize == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (VariableName[0] == 0) {
+    return EFI_NOT_FOUND;
+  }
+
+  AcquireLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
+
+  mVarCurr = 0;
+  Status = FindVariableRS (VariableName, VendorGuid);
+  if (EFI_ERROR (Status) || (mVarCurr >= mVarCount)) {
+    goto Done;
+  }
+
+  //
+  // Get data size
+  //
+  pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+  VarDataSize = pSVCAVar->DataSize;
+
+  if (VarDataSize && *DataSize >= VarDataSize) {
+    if (Data == NULL) {
+      Status = EFI_INVALID_PARAMETER;
+      goto Done;
+    }
+
+    CopyMem (Data, (UINT8 *)pSVCAVar->Name + pSVCAVar->NameSize, VarDataSize);
+
+    *DataSize = VarDataSize;
+
+    Status = EFI_SUCCESS;
+    goto Done;
+  } else {
+    *DataSize = VarDataSize;
+    Status    = EFI_BUFFER_TOO_SMALL;
+    goto Done;
+  }
+
+Done:
+  if ((Status == EFI_SUCCESS) || (Status == EFI_BUFFER_TOO_SMALL)) {
+    if ((Attributes != NULL) && (mVarCurr < mVarCount)) {
+      *Attributes = pSVCAVar->Attributes;
+    }
+  }
+
+  ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
+  return Status;
+}
+#endif
 
 /**
 
@@ -2555,6 +2631,7 @@ VariableServiceGetNextVariableName (
               AuthFormat
               );
   if (!EFI_ERROR (Status)) {
+#if !ENABLE_RS_SVA
     VarNameSize = NameSizeOfVariable (VariablePtr, AuthFormat);
     ASSERT (VarNameSize != 0);
     if (VarNameSize <= *VariableNameSize) {
@@ -2568,6 +2645,24 @@ VariableServiceGetNextVariableName (
         GetVendorGuidPtr (VariablePtr, AuthFormat),
         sizeof (EFI_GUID)
         );
+#else
+    SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE  *pSVCAVar;
+
+    pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+    VarNameSize = pSVCAVar->NameSize;
+    ASSERT (VarNameSize != 0);
+    if (VarNameSize <= *VariableNameSize) {
+      CopyMem (
+        VariableName,
+        pSVCAVar->Name,
+        VarNameSize
+        );
+      CopyMem (
+        VendorGuid,
+        (const void *)pSVCAVar,
+        sizeof (EFI_GUID)
+        );
+#endif
       Status = EFI_SUCCESS;
     } else {
       Status = EFI_BUFFER_TOO_SMALL;

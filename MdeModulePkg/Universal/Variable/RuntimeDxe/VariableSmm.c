@@ -40,6 +40,20 @@ BOOLEAN  mAtRuntime              = FALSE;
 UINT8    *mVariableBufferPayload = NULL;
 UINTN    mVariableBufferPayloadSize;
 
+#define ENABLE_RS_SVA  1
+
+#if ENABLE_RS_SVA
+struct VarCache {
+	SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE set;
+	UINT8 *data;
+};
+
+//static struct VarCache mVarCache[45];
+UINT8 mVarCount = 0;
+UINT8 mVarBuffer[45][700];
+UINT8 mVarCurr;
+#endif
+
 /**
   SecureBoot Hook for SetVariable.
 
@@ -612,7 +626,11 @@ SmmVariableHandler (
                  &SmmVariableHeader->DataSize,
                  (UINT8 *)SmmVariableHeader->Name + SmmVariableHeader->NameSize
                  );
+#if !ENABLE_RS_SVA
       CopyMem (SmmVariableFunctionHeader->Data, mVariableBufferPayload, CommBufferPayloadSize);
+#else
+      CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[mVarCurr], CommBufferPayloadSize);
+#endif
       //memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
       DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
       break;
@@ -719,6 +737,46 @@ SmmVariableHandler (
       }
 
       memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "SET");
+
+#if ENABLE_RS_SVA
+      {
+	UINT8 Count = mVarCount;
+
+	if (Count) {
+		SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSet1, *pSet2;
+
+		/* Check if same Vendor Guid and Variable Name pre-exists */
+		while (Count) {
+			if (CompareMem (SmmVariableFunctionHeader->Data,
+					&mVarBuffer[Count - 1], sizeof(EFI_GUID)) == 0) {
+				pSet1 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data;
+				pSet2 = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[Count - 1];
+
+				if ((pSet1->NameSize == pSet2->NameSize) &&
+				    (CompareMem (pSet1->Name, pSet2->Name,
+						 pSet1->NameSize) == 0)) {
+					/* Match found, update the existing data */
+					DEBUG ((DEBUG_INFO, "Ranbir: Update Existing Variable, At Count = %d\n", Count));
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					CopyMem (&mVarBuffer[Count - 1], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+					//DEBUG ((DEBUG_INFO, "Ranbir: Existing Variable - New Data\n"));
+					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					break;
+				}
+			}
+			Count--;
+		};
+	}
+
+	if (!Count) {
+		CopyMem (&mVarBuffer[mVarCount], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
+		//memdump(&mVarBuffer[mVarCount], CommBufferPayloadSize, "NCACHE");
+		mVarCount++;
+		DEBUG ((DEBUG_INFO, "Ranbir: Added New Variable with Attribues = 0x%x, Net Count = %d\n", ((SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data)->Attributes, mVarCount));
+	}
+      }
+#endif
+
       Status = VariableServiceSetVariable (
                  SmmVariableHeader->Name,
                  &SmmVariableHeader->Guid,

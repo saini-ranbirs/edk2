@@ -8,6 +8,15 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
 
 #include "VariableParsing.h"
+#include <Guid/SmmVariableCommon.h>
+
+#define ENABLE_RS_SVA  1
+
+#if ENABLE_RS_SVA
+extern UINT8 mVarCount;
+extern UINT8 mVarBuffer[45][700];
+extern UINT8 mVarCurr;
+#endif
 
 /**
 
@@ -537,6 +546,42 @@ FindVariableEx (
   return (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS;
 }
 
+#if ENABLE_RS_SVA
+EFI_STATUS
+FindVariableRS (
+  IN CHAR16    *VariableName,
+  IN EFI_GUID  *VendorGuid
+  )
+{
+  SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *pSVCAVar;
+
+  while (mVarCurr < mVarCount) {
+    if (VariableName[0] == 0) {
+      //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+      return EFI_SUCCESS;
+    } else {
+      pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
+      //memdump(pSVCAVar, 16, "1");
+      if (CompareGuid (VendorGuid, (const GUID *)pSVCAVar)) {
+        ASSERT ((pSVCAVar->NameSize) != 0);
+        //memdump(pSVCAVar->Name, pSVCAVar->NameSize, "1");
+        if (CompareMem (VariableName, pSVCAVar->Name, pSVCAVar->NameSize) == 0) {
+          //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+          return EFI_SUCCESS;
+        } else {
+          //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Variable Name Mismatch L%d\n", __LINE__));
+        }
+      } else {
+        //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Vendor GUID Mismatch L%d\n", __LINE__));
+      }
+    }
+    mVarCurr++;
+  }
+
+  return (mVarCurr >= mVarCount) ? EFI_NOT_FOUND : EFI_SUCCESS;
+}
+#endif
+
 /**
   This code finds the next available variable.
 
@@ -567,6 +612,7 @@ VariableServiceGetNextVariableInternal (
   OUT VARIABLE_HEADER        **VariablePtr,
   IN  BOOLEAN                AuthFormat
   )
+#if !ENABLE_RS_SVA
 {
   EFI_STATUS              Status;
   VARIABLE_STORE_TYPE     StoreType;
@@ -744,6 +790,61 @@ VariableServiceGetNextVariableInternal (
 Done:
   return Status;
 }
+#else
+{
+  EFI_STATUS  Status;
+
+  Status = EFI_NOT_FOUND;
+
+  // Check if the variable exists in the given variable store list
+  /*DEBUG ((DEBUG_INFO, "Ranbir: L%d StoreType = %d initiating memdump\n", __LINE__, StoreType));
+  if ((Variable.EndPtr - Variable.StartPtr) > 0)
+    memdump(Variable.StartPtr, Variable.EndPtr - Variable.StartPtr + 1, "ALL");
+  else
+    memdump(Variable.StartPtr, Variable.StartPtr - Variable.EndPtr + 1, "ALL");*/
+
+  mVarCurr = 0;
+  Status = FindVariableRS (VariableName, VendorGuid);
+  DEBUG ((DEBUG_INFO,
+          "Ranbir: GNVNI Status1 L%d = %d CurrPtr = %d mVarCount = %d\n",
+          __LINE__, Status, mVarCurr, mVarCount));
+
+  if (EFI_ERROR (Status)) {
+    //
+    // For VariableName is an empty string, FindVariableEx() will try to find and return
+    // the first qualified variable, and if FindVariableEx() returns error (EFI_NOT_FOUND)
+    // as no any variable is found, still go to return the error (EFI_NOT_FOUND).
+    //
+    if (VariableName[0] != 0) {
+      //
+      // For VariableName is not an empty string, and FindVariableEx() returns error as
+      // VariableName and VendorGuid are not a name and GUID of an existing variable,
+      // there is no way to get next variable, follow spec to return EFI_INVALID_PARAMETER.
+      //
+      Status = EFI_INVALID_PARAMETER;
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d ", __LINE__, Status)); // Not coming here
+    }
+
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    goto Done;
+  }
+
+  if (VariableName[0] != 0) {
+    //
+    // If variable name is not empty, get next variable.
+    //
+    mVarCurr++;
+    if (mVarCurr >= mVarCount)
+      Status = EFI_NOT_FOUND;
+
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    goto Done;
+  }
+
+Done:
+  return Status;
+}
+#endif
 
 /**
   Routine used to track statistical information about variable usage.
