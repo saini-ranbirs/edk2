@@ -651,7 +651,7 @@ StandaloneMmMain (
                mMmCoreMmiHandlers[Index].HandlerType,
                &mMmCoreMmiHandlers[Index].DispatchHandle
                );
-    DEBUG ((DEBUG_INFO, "MmiHandlerRegister - GUID %g - Status %d\n", mMmCoreMmiHandlers[Index].HandlerType, Status));
+    DEBUG ((DEBUG_INFO, "Ranbir: MmiHandlerRegister - GUID %g - Status %x\n", mMmCoreMmiHandlers[Index].HandlerType, Status));
   }
 
   DEBUG ((DEBUG_INFO, "MmMain Done!\n"));

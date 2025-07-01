@@ -840,13 +840,13 @@ FindVariableInSmm (
 
   CopyMem (SmmVariableHeader->Name, VariableName, SmmVariableHeader->NameSize);
 
-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer PayloadSize %d \n", PayloadSize));
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer PayloadSize %ld \n", PayloadSize));
   //
   // Send data to SMM.
   //
   Status = SendCommunicateBuffer (PayloadSize);
 
-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status1 = %d\n", Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status1 = %r\n", Status));
   //
   // Get data from SMM.
   //
@@ -873,7 +873,7 @@ FindVariableInSmm (
   }
 
 Done:
-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status2 = %d\n", Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status2 = %r\n", Status));
   return Status;
 }
 
@@ -936,7 +936,7 @@ RuntimeServiceGetVariable (
 
   ReleaseLockOnlyAtBootTime (&mVariableServicesLock);
 
-  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable Status %d\n", Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable Status %r\n", Status));
   if (Status == EFI_SUCCESS)
 	memdump(Data, *DataSize, "GVData");
 
@@ -1335,7 +1335,7 @@ Done:
     }
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceSetVariable %d VariableNameSize %d DataSize %d Status %d\n", EfiAtRuntime (), VariableNameSize, DataSize, Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceSetVariable %d VariableNameSize %d DataSize %d Status %r\n", EfiAtRuntime (), VariableNameSize, DataSize, Status));
 
   return Status;
 }

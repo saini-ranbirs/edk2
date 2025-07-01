@@ -31,7 +31,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableRuntimeCache.h"
 #include <Guid/SmmVariableCommon.h>
 
-#define ENABLE_RS_SVA  1
+#define ENABLE_RS_SVA  0
 
 #if ENABLE_RS_SVA
 extern UINT8 mVarCount;
@@ -902,12 +902,12 @@ FindVariable (
                 mVariableModuleGlobal->VariableGlobal.AuthFormat
                 );
     if (!EFI_ERROR (Status)) {
-      DEBUG((DEBUG_INFO, "Variable EFI_FOUND\n"));
+      DEBUG((DEBUG_INFO, "Ranbir: Variable EFI_FOUND\n"));
       return Status;
     }
   }
 
-  DEBUG((DEBUG_INFO, "Variable EFI_NOT_FOUND\n"));
+  DEBUG((DEBUG_INFO, "Ranbir: Variable EFI_NOT_FOUND\n"));
   return EFI_NOT_FOUND;
 }
 
@@ -2671,7 +2671,7 @@ VariableServiceGetNextVariableName (
     *VariableNameSize = VarNameSize;
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: CallCount = %d Status2 = %d NameSize = %d\n", CallCount, Status, *VariableNameSize));
+  DEBUG ((DEBUG_INFO, "Ranbir: CallCount = %d Status2 = %r NameSize = %d\n", CallCount, Status, *VariableNameSize));
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }
@@ -3564,7 +3564,6 @@ VariableWriteServiceInitialize (
     mAuthContextIn.StructSize          = sizeof (AUTH_VAR_LIB_CONTEXT_IN);
     mAuthContextIn.MaxAuthVariableSize =  mVariableModuleGlobal->MaxAuthVariableSize -
                                          GetVariableHeaderSize (mVariableModuleGlobal->VariableGlobal.AuthFormat);
-    DEBUG ((DEBUG_INFO, "NOTICE - AuthVariableLibInitialize() called !\n"));
     Status = AuthVariableLibInitialize (&mAuthContextIn, &mAuthContextOut);
     if (!EFI_ERROR (Status)) {
       DEBUG ((DEBUG_INFO, "Variable driver will work with auth variable support!\n"));

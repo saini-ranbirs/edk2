@@ -10,13 +10,63 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableParsing.h"
 #include <Guid/SmmVariableCommon.h>
 
-#define ENABLE_RS_SVA  1
+#define ENABLE_RS_SVA  0
 
 #if ENABLE_RS_SVA
 extern UINT8 mVarCount;
 extern UINT8 mVarBuffer[45][700];
 extern UINT8 mVarCurr;
 #endif
+
+static void memdump(const void *src, UINTN count, char *name);
+
+static void memdump(const void *src, UINTN count, char *name)
+{
+#define BFR_DATA_LIMIT  16
+
+	const char *temp = src;
+	unsigned char bfr_data[BFR_DATA_LIMIT];
+	UINTN bfr_counter, bfr_counter_limit;
+	UINTN remaining = count, loop_count = 0;
+
+	DEBUG((DEBUG_INFO,"\nEDK2 %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
+
+	while (remaining) {
+		bfr_counter = 0;
+
+		(remaining >= BFR_DATA_LIMIT) ?
+		    (bfr_counter_limit = BFR_DATA_LIMIT) :
+		    (bfr_counter_limit = remaining);
+
+		while (bfr_counter < bfr_counter_limit) {
+			bfr_data[bfr_counter] = *(temp + bfr_counter);
+			bfr_counter++;
+		}
+
+		/* For simplicity, fill rest with ZERO's if required */
+		while (bfr_counter < BFR_DATA_LIMIT) {
+			bfr_data[bfr_counter] = 0x00;
+			bfr_counter++;
+		}
+
+		if (loop_count < 45) {
+		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+			"%02x%02x %02x%02x %02x%02x %02x%02x "
+			"%02x%02x %02x%02x %02x%02x %02x%02x",
+			temp, count - remaining,
+			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
+			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
+			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
+			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
+		}
+
+		temp = temp + bfr_counter_limit;
+		remaining = remaining - bfr_counter_limit;
+		loop_count++;
+	}
+
+	DEBUG((DEBUG_INFO,"\n%p: %06lu\n", temp, count - remaining));
+}
 
 /**
 
@@ -468,8 +518,6 @@ VariableCompareTimeStampInternal (
   @retval          EFI_SUCCESS         Variable found successfully
   @retval          EFI_NOT_FOUND       Variable not found
 **/
-extern void memdump(const void *src, UINTN count, char *name);
-
 EFI_STATUS
 FindVariableEx (
   IN     CHAR16                  *VariableName,
@@ -542,7 +590,7 @@ FindVariableEx (
   }
 
   PtrTrack->CurrPtr = InDeletedVariable;
-  DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d Status = %d PtrTrack->CurrPtr = 0x%x\n", __LINE__, (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS, PtrTrack->CurrPtr));
+  DEBUG ((DEBUG_INFO, "Ranbir: FindVariableEx %d Status = %r PtrTrack->CurrPtr = 0x%x\n", __LINE__, (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS, PtrTrack->CurrPtr));
   return (PtrTrack->CurrPtr  == NULL) ? EFI_NOT_FOUND : EFI_SUCCESS;
 }
 
@@ -557,27 +605,31 @@ FindVariableRS (
 
   while (mVarCurr < mVarCount) {
     if (VariableName[0] == 0) {
-      //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+      DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d = EFI_SUCCESS mVarCurr = %d\n", __LINE__, mVarCurr));
       return EFI_SUCCESS;
     } else {
       pSVCAVar = (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)&mVarBuffer[mVarCurr];
-      //memdump(pSVCAVar, 16, "1");
+      memdump(pSVCAVar, 16, "1");
       if (CompareGuid (VendorGuid, (const GUID *)pSVCAVar)) {
         ASSERT ((pSVCAVar->NameSize) != 0);
-        //memdump(pSVCAVar->Name, pSVCAVar->NameSize, "1");
+        memdump(pSVCAVar->Name, pSVCAVar->NameSize, "1");
         if (CompareMem (VariableName, pSVCAVar->Name, pSVCAVar->NameSize) == 0) {
-          //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d mVarCurr = %d\n", __LINE__, mVarCurr));
+          DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d = EFI_SUCCESS mVarCurr = %d\n", __LINE__, mVarCurr));
           return EFI_SUCCESS;
         } else {
-          //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Variable Name Mismatch L%d\n", __LINE__));
+          DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Variable Name Mismatch L%d\n", __LINE__));
         }
       } else {
-        //DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Vendor GUID Mismatch L%d\n", __LINE__));
+        DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS Vendor GUID Mismatch L%d\n", __LINE__));
       }
     }
     mVarCurr++;
   }
 
+  if (mVarCurr >= mVarCount)
+    DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d = EFI_NOT_FOUND mVarCurr = %d\n", __LINE__, mVarCurr));
+  else
+    DEBUG ((DEBUG_INFO, "Ranbir: FindVariableRS L%d = EFI_SUCCESS mVarCurr = %d\n", __LINE__, mVarCurr));
   return (mVarCurr >= mVarCount) ? EFI_NOT_FOUND : EFI_SUCCESS;
 }
 #endif
@@ -647,7 +699,7 @@ VariableServiceGetNextVariableInternal (
       memdump(Variable.StartPtr, Variable.StartPtr - Variable.EndPtr + 1, "ALL");*/
 
     Status = FindVariableEx (VariableName, VendorGuid, FALSE, &Variable, AuthFormat);
-    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d StoreType = %d\n", __LINE__, Status, StoreType));
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r StoreType = %d\n", __LINE__, Status, StoreType));
     DEBUG ((DEBUG_INFO, "Ranbir: Variable.StartPtr = 0x%x Variable.CurrPtr = 0x%x Variable.EndPtr = 0x%x\n", Variable.StartPtr, Variable.CurrPtr, Variable.EndPtr));
     if (!EFI_ERROR (Status)) {
       break;
@@ -667,10 +719,10 @@ VariableServiceGetNextVariableInternal (
       // there is no way to get next variable, follow spec to return EFI_INVALID_PARAMETER.
       //
       Status = EFI_INVALID_PARAMETER;
-      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d ", __LINE__, Status)); // Not coming here
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r ", __LINE__, Status)); // Not coming here
     }
 
-    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r\n", __LINE__, Status));
     goto Done;
   }
 
@@ -679,7 +731,7 @@ VariableServiceGetNextVariableInternal (
     // If variable name is not empty, get next variable.
     //
     Variable.CurrPtr = GetNextVariablePtr (Variable.CurrPtr, AuthFormat);
-    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r\n", __LINE__, Status));
   }
 
   while (TRUE) {
@@ -696,7 +748,7 @@ VariableServiceGetNextVariableInternal (
       for (StoreType = (VARIABLE_STORE_TYPE)0; StoreType < VariableStoreTypeMax; StoreType++) {
         DEBUG ((DEBUG_INFO, "Ranbir: GNVNI StoreType L%d = %d LoopCount = %d\n", __LINE__, StoreType, LoopCount));
         if ((VariableStoreList[StoreType] != NULL) && (Variable.StartPtr == GetStartPointer (VariableStoreList[StoreType]))) {
-          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
+          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r LoopCount = %d\n", __LINE__, Status, LoopCount));
           break;
         }
       }
@@ -707,7 +759,7 @@ VariableServiceGetNextVariableInternal (
       //
       for (StoreType++; StoreType < VariableStoreTypeMax; StoreType++) {
         if (VariableStoreList[StoreType] != NULL) {
-          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
+          DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r LoopCount = %d\n", __LINE__, Status, LoopCount));
           break;
         }
       }
@@ -719,14 +771,14 @@ VariableServiceGetNextVariableInternal (
       //
       if (StoreType == VariableStoreTypeMax) {
         Status = EFI_NOT_FOUND;
-        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d\n", __LINE__, Status, LoopCount));
+        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r LoopCount = %d\n", __LINE__, Status, LoopCount));
         goto Done;
       }
 
       Variable.StartPtr = GetStartPointer (VariableStoreList[StoreType]);
       Variable.EndPtr   = GetEndPointer (VariableStoreList[StoreType]);
       Variable.CurrPtr  = Variable.StartPtr;
-      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
     }
 
     //
@@ -779,7 +831,7 @@ VariableServiceGetNextVariableInternal (
 
         *VariablePtr = Variable.CurrPtr;
         Status       = EFI_SUCCESS;
-        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
+        DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r LoopCount = %d Variable.CurrPtr = 0x%x\n", __LINE__, Status, LoopCount, Variable.CurrPtr));
         goto Done;
       }
     }
@@ -806,7 +858,7 @@ Done:
   mVarCurr = 0;
   Status = FindVariableRS (VariableName, VendorGuid);
   DEBUG ((DEBUG_INFO,
-          "Ranbir: GNVNI Status1 L%d = %d CurrPtr = %d mVarCount = %d\n",
+          "Ranbir: GNVNI Status1 L%d = %r CurrPtr = %d mVarCount = %d\n",
           __LINE__, Status, mVarCurr, mVarCount));
 
   if (EFI_ERROR (Status)) {
@@ -822,10 +874,10 @@ Done:
       // there is no way to get next variable, follow spec to return EFI_INVALID_PARAMETER.
       //
       Status = EFI_INVALID_PARAMETER;
-      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d ", __LINE__, Status)); // Not coming here
+      DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r ", __LINE__, Status)); // Not coming here
     }
 
-    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r\n", __LINE__, Status));
     goto Done;
   }
 
@@ -837,7 +889,7 @@ Done:
     if (mVarCurr >= mVarCount)
       Status = EFI_NOT_FOUND;
 
-    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %d\n", __LINE__, Status));
+    DEBUG ((DEBUG_INFO, "Ranbir: GNVNI Status1 L%d = %r\n", __LINE__, Status));
     goto Done;
   }
 

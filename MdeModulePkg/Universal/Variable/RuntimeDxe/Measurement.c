@@ -197,7 +197,7 @@ InternalGetVariable (
   DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Call GetVariable\n"));
   Status = gRT->GetVariable ((CHAR16 *)Name, (EFI_GUID *)Guid, NULL, &BufferSize, *Value);
   DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: BufferSize = %d\n", BufferSize));
-  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status1 = %d\n", Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status1 = %r\n", Status));
   if (Status != EFI_BUFFER_TOO_SMALL) {
     return Status;
   }
@@ -224,7 +224,7 @@ InternalGetVariable (
     *Size = BufferSize;
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status2 = %d\n", Status));
+  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status2 = %r\n", Status));
   return Status;
 }
 
@@ -246,7 +246,7 @@ SecureBootHook (
   UINTN       VariableDataSize;
   VOID        *VariableData;
 
-  DEBUG ((DEBUG_INFO, "MUVRM SecureBootHook\n"));
+  DEBUG ((DEBUG_INFO, "Ranbir: MUVRM SecureBootHook\n"));
 
   if (!IsSecureBootPolicyVariable (VariableName, VendorGuid)) {
     return;
