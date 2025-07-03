@@ -40,7 +40,7 @@ BOOLEAN  mAtRuntime              = FALSE;
 UINT8    *mVariableBufferPayload = NULL;
 UINTN    mVariableBufferPayloadSize;
 
-#define ENABLE_RS_SVA  0
+#define ENABLE_RS_SVA  1
 
 #if ENABLE_RS_SVA
 struct VarCache {

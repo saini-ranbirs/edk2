@@ -31,7 +31,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 #include "VariableRuntimeCache.h"
 #include <Guid/SmmVariableCommon.h>
 
-#define ENABLE_RS_SVA  0
+#define ENABLE_RS_SVA  1
 
 #if ENABLE_RS_SVA
 extern UINT8 mVarCount;
