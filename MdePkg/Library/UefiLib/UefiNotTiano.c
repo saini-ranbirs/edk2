@@ -224,12 +224,14 @@ EfiSignalEventReadyToBoot (
   EFI_EVENT   ReadyToBootEvent;
   EFI_EVENT   AfterReadyToBootEvent;
 
+  DEBUG ((DEBUG_ERROR, "EfiSignalEventReadyToBoot: raising!\n"));
   Status = EfiCreateEventReadyToBoot (&ReadyToBootEvent);
   if (!EFI_ERROR (Status)) {
     gBS->SignalEvent (ReadyToBootEvent);
     gBS->CloseEvent (ReadyToBootEvent);
   }
 
+  DEBUG ((DEBUG_ERROR, "EfiSignalEventReadyToBoot: raised!\n"));
   Status = gBS->CreateEventEx (
                   EVT_NOTIFY_SIGNAL,
                   TPL_CALLBACK,
