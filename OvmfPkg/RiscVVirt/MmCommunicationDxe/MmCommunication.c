@@ -52,7 +52,7 @@ static void memdump(const void *src, UINTN count, void *dest)
 	UINTN bfr_counter, bfr_counter_limit;
 	UINTN remaining = count, loop_count = 0;
 
-	DEBUG((DEBUG_INFO,"\nEDK2 - Data Size : %06lu", count));
+	DEBUG((DEBUG_INFO,"\nEDK2 - Data Size: %06lu", count));
 
 	while (remaining) {
 		bfr_counter = 0;
@@ -74,11 +74,13 @@ static void memdump(const void *src, UINTN count, void *dest)
 			bfr_counter++;
 		}
 
-		if (loop_count < 68) {
-		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+		if (loop_count < 64) {
+		DEBUG((DEBUG_INFO,"\n%06lu: "
+		//DEBUG((DEBUG_INFO,"\n%p: %06lu "
 			"%02x%02x %02x%02x %02x%02x %02x%02x "
 			"%02x%02x %02x%02x %02x%02x %02x%02x",
-			temp, count - remaining,
+			//temp,
+			count - remaining,
 			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
 			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
 			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
@@ -90,7 +92,7 @@ static void memdump(const void *src, UINTN count, void *dest)
 		loop_count++;
 	}
 
-	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
+	DEBUG((DEBUG_INFO,"\n%06lu\n", count - remaining));
 }
 
 /**
@@ -208,12 +210,13 @@ MmCommunication2Communicate (
 
   memdump ((VOID *)mNsCommBuffMemRegion.VirtualBase, BufferSize, NULL);
 
-  DEBUG((DEBUG_INFO, "Ranbir: calling SbiMpxySendMessage: %d\n", __LINE__));
+  DEBUG((DEBUG_INFO, "MMC: SbiMpxySendMessage: Calling\n"));
 
   // Call the Standalone MM environment.
   Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_COMMUNICATE,
 		(VOID *)&CommunicateArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
 		(VOID *)&CommunicateArgs, &MmRespLen);
+  DEBUG ((DEBUG_INFO, "MMC: SbiMpxySendMessage: MmRespLen %d\n", MmRespLen));
   if (EFI_ERROR (Status) || (0 == MmRespLen)) {
     return Status;
   }

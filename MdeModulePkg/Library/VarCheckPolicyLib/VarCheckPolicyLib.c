@@ -96,12 +96,15 @@ VarCheckPolicyLibMmiHandler (
 
   Status = EFI_SUCCESS;
 
+  DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
+
   //
   // Validate some input parameters.
   //
   // If either of the pointers are NULL, we can't proceed.
   if ((CommBuffer == NULL) || (CommBufferSize == NULL)) {
     DEBUG ((DEBUG_INFO, "%a - Invalid comm buffer pointers!\n", __func__));
+    DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
     return EFI_INVALID_PARAMETER;
   }
 
@@ -111,6 +114,7 @@ VarCheckPolicyLibMmiHandler (
   if ((InternalCommBufferSize > VAR_CHECK_POLICY_MM_COMM_BUFFER_SIZE) ||
       !VarCheckPolicyIsBufferOutsideValid ((UINTN)CommBuffer, (UINT64)InternalCommBufferSize))
   {
+    DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
     DEBUG ((DEBUG_ERROR, "%a - Invalid CommBuffer supplied! 0x%016lX[0x%016lX]\n", __func__, CommBuffer, InternalCommBufferSize));
     return EFI_INVALID_PARAMETER;
   }
@@ -118,6 +122,7 @@ VarCheckPolicyLibMmiHandler (
   // If the size does not meet a minimum threshold, we cannot proceed.
   ExpectedSize = sizeof (VAR_CHECK_POLICY_COMM_HEADER);
   if (InternalCommBufferSize < ExpectedSize) {
+    DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
     DEBUG ((DEBUG_INFO, "%a - Bad comm buffer size! %d < %d\n", __func__, InternalCommBufferSize, ExpectedSize));
     return EFI_INVALID_PARAMETER;
   }
@@ -134,6 +139,7 @@ VarCheckPolicyLibMmiHandler (
   if ((InternalPolicyCommHeader->Signature != VAR_CHECK_POLICY_COMM_SIG) ||
       (InternalPolicyCommHeader->Revision != VAR_CHECK_POLICY_COMM_REVISION))
   {
+    DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
     DEBUG ((DEBUG_INFO, "%a - Signature or revision are incorrect!\n", __func__));
     // We have verified the buffer is not null and have enough size to hold Result field.
     PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
@@ -156,6 +162,7 @@ VarCheckPolicyLibMmiHandler (
   switch (InternalPolicyCommHeader->Command) {
     case VAR_CHECK_POLICY_COMMAND_DISABLE:
       PolicyCommHeader->Result = DisableVariablePolicy ();
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     case VAR_CHECK_POLICY_COMMAND_IS_ENABLED:
@@ -165,6 +172,7 @@ VarCheckPolicyLibMmiHandler (
       if (InternalCommBufferSize < ExpectedSize) {
         DEBUG ((DEBUG_INFO, "%a - Bad comm buffer size! %d < %d\n", __func__, InternalCommBufferSize, ExpectedSize));
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -172,6 +180,7 @@ VarCheckPolicyLibMmiHandler (
       IsEnabledParams          = (VAR_CHECK_POLICY_COMM_IS_ENABLED_PARAMS *)((UINT8 *)CommBuffer + sizeof (VAR_CHECK_POLICY_COMM_HEADER));
       IsEnabledParams->State   = IsVariablePolicyEnabled ();
       PolicyCommHeader->Result = EFI_SUCCESS;
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     case VAR_CHECK_POLICY_COMMAND_REGISTER:
@@ -181,6 +190,7 @@ VarCheckPolicyLibMmiHandler (
       if (InternalCommBufferSize < ExpectedSize) {
         DEBUG ((DEBUG_INFO, "%a - Bad comm buffer size! %d < %d\n", __func__, InternalCommBufferSize, ExpectedSize));
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -194,10 +204,12 @@ VarCheckPolicyLibMmiHandler (
       {
         DEBUG ((DEBUG_INFO, "%a - Bad policy entry contents!\n", __func__));
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
       PolicyCommHeader->Result = RegisterVariablePolicy (PolicyEntry);
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     case VAR_CHECK_POLICY_COMMAND_DUMP:
@@ -207,6 +219,7 @@ VarCheckPolicyLibMmiHandler (
       if (InternalCommBufferSize < ExpectedSize) {
         DEBUG ((DEBUG_INFO, "%a - Bad comm buffer size! %d < %d\n", __func__, InternalCommBufferSize, ExpectedSize));
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -296,10 +309,12 @@ VarCheckPolicyLibMmiHandler (
 
       // There's currently no use for this, but it shouldn't be hard to implement.
       PolicyCommHeader->Result = SubCommandStatus;
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     case VAR_CHECK_POLICY_COMMAND_LOCK:
       PolicyCommHeader->Result = LockVariablePolicy ();
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     case VAR_CHECK_POLICY_COMMAND_GET_INFO:
@@ -308,6 +323,7 @@ VarCheckPolicyLibMmiHandler (
 
       if (InternalCommBufferSize < ExpectedSize) {
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -321,6 +337,7 @@ VarCheckPolicyLibMmiHandler (
                             );
       if (EFI_ERROR (SubCommandStatus)) {
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -332,6 +349,7 @@ VarCheckPolicyLibMmiHandler (
                               );
         if (EFI_ERROR (SubCommandStatus)) {
           PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+          DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
           break;
         }
       } else {
@@ -361,16 +379,19 @@ VarCheckPolicyLibMmiHandler (
                               );
       } else {
         PolicyCommHeader->Result = EFI_INVALID_PARAMETER;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
       if (EFI_ERROR (SubCommandStatus) && (SubCommandStatus != EFI_BUFFER_TOO_SMALL)) {
         PolicyCommHeader->Result = SubCommandStatus;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
       if (EFI_ERROR (SafeUintnToUint32 (LocalSize, &GetInfoParamsInternal->OutputVariableNameSize))) {
         PolicyCommHeader->Result = EFI_BAD_BUFFER_SIZE;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -384,6 +405,7 @@ VarCheckPolicyLibMmiHandler (
       GetInfoParamsExternal->OutputVariableNameSize = GetInfoParamsInternal->OutputVariableNameSize;
       if (SubCommandStatus == EFI_BUFFER_TOO_SMALL) {
         PolicyCommHeader->Result = EFI_BUFFER_TOO_SMALL;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -394,6 +416,7 @@ VarCheckPolicyLibMmiHandler (
                             );
       if (EFI_ERROR (SubCommandStatus)) {
         PolicyCommHeader->Result = EFI_BAD_BUFFER_SIZE;
+        DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
         break;
       }
 
@@ -414,6 +437,7 @@ VarCheckPolicyLibMmiHandler (
 
       PolicyCommHeader->Result = SubCommandStatus;
 
+      DEBUG ((DEBUG_INFO, "%a - header guid EFI_SMM_VARIABLE_CHECK_POLICY_GUID - %d!\n", __func__, __LINE__));
       break;
 
     default:
@@ -424,7 +448,7 @@ VarCheckPolicyLibMmiHandler (
   }
 
   DEBUG ((
-    DEBUG_VERBOSE,
+    DEBUG_INFO,
     "%a - Command %d returning %r.\n",
     __func__,
     PolicyCommHeader->Command,

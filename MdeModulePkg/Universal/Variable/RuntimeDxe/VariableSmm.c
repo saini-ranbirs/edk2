@@ -54,6 +54,8 @@ UINT8 mVarBuffer[45][700];
 UINT8 mVarCurr;
 #endif
 
+UINTN mMMCallCounter = 0;
+
 /**
   SecureBoot Hook for SetVariable.
 
@@ -449,7 +451,7 @@ static void memdump(const void *src, UINTN count, char *name)
 	UINTN bfr_counter, bfr_counter_limit;
 	UINTN remaining = count, loop_count = 0;
 
-	DEBUG((DEBUG_INFO,"\nSMM %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
+	DEBUG((DEBUG_INFO,"\nASMM %s: %06lu", name, count));
 
 	while (remaining) {
 		bfr_counter = 0;
@@ -469,11 +471,13 @@ static void memdump(const void *src, UINTN count, char *name)
 			bfr_counter++;
 		}
 
-		if (loop_count < 45) {
-		DEBUG((DEBUG_INFO,"\n%p: %06lu "
+		if (loop_count < 64) {
+		DEBUG((DEBUG_INFO,"\n%06lu: "
+		//DEBUG((DEBUG_INFO,"\n%p: %06lu "
 			"%02x%02x %02x%02x %02x%02x %02x%02x "
 			"%02x%02x %02x%02x %02x%02x %02x%02x",
-			temp, count - remaining,
+			//temp,
+			count - remaining,
 			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
 			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
 			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
@@ -485,7 +489,7 @@ static void memdump(const void *src, UINTN count, char *name)
 		loop_count++;
 	}
 
-	DEBUG((DEBUG_INFO,"\n%p: %06lu\n", temp, count - remaining));
+	DEBUG((DEBUG_INFO,"\n%06lu\n", count - remaining));
 }
 
 /**
@@ -571,7 +575,7 @@ SmmVariableHandler (
   DEBUG ((DEBUG_INFO, "SmmVariableHandler: SmmVariableFunctionHeader->Function = %d\n", SmmVariableFunctionHeader->Function));
   switch (SmmVariableFunctionHeader->Function) {
     case SMM_VARIABLE_FUNCTION_GET_VARIABLE:
-      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_VARIABLE\n"));
+      DEBUG ((DEBUG_INFO, "ASMM: Processing SMM_VARIABLE_FUNCTION_GET_VARIABLE: CallCounter %d\n", ++mMMCallCounter));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name)) {
         DEBUG ((DEBUG_ERROR, "GetVariable: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -632,11 +636,12 @@ SmmVariableHandler (
       CopyMem (SmmVariableFunctionHeader->Data, &mVarBuffer[mVarCurr], CommBufferPayloadSize);
 #endif
       //memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
-      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
+      DEBUG ((DEBUG_INFO, "ASMM: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
+      DEBUG ((DEBUG_INFO, "ASMM: Processed SMM_VARIABLE_FUNCTION_GET_VARIABLE: CallCounter %d Status %r\n", mMMCallCounter, Status));
       break;
 
     case SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME:
-      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME\n"));
+      DEBUG ((DEBUG_INFO, "ASMM: Processing SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME: CallCounter %d\n", ++mMMCallCounter));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_GET_NEXT_VARIABLE_NAME, Name)) {
         DEBUG ((DEBUG_ERROR, "GetNextVariableName: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -685,10 +690,11 @@ SmmVariableHandler (
                  );
       CopyMem (SmmVariableFunctionHeader->Data, mVariableBufferPayload, CommBufferPayloadSize);
       memdump(SmmVariableFunctionHeader->Data, CommBufferPayloadSize, "OUT");
+      DEBUG ((DEBUG_INFO, "ASMM: Processed SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME: CallCounter %d Status %r\n", mMMCallCounter, Status));
       break;
 
     case SMM_VARIABLE_FUNCTION_SET_VARIABLE:
-      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_SET_VARIABLE\n"));
+      DEBUG ((DEBUG_INFO, "ASMM: Processing SMM_VARIABLE_FUNCTION_SET_VARIABLE: CallCounter %d\n", ++mMMCallCounter));
       if (CommBufferPayloadSize < OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name)) {
         DEBUG ((DEBUG_ERROR, "SetVariable: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -756,11 +762,11 @@ SmmVariableHandler (
 				    (CompareMem (pSet1->Name, pSet2->Name,
 						 pSet1->NameSize) == 0)) {
 					/* Match found, update the existing data */
-					DEBUG ((DEBUG_INFO, "Ranbir: Update Existing Variable, At Count = %d\n", Count));
 					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
 					CopyMem (&mVarBuffer[Count - 1], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
-					//DEBUG ((DEBUG_INFO, "Ranbir: Existing Variable - New Data\n"));
+					//DEBUG ((DEBUG_INFO, "ASMM: Existing Variable - New Data\n"));
 					//memdump(&mVarBuffer[Count - 1], CommBufferPayloadSize, "UCACHE");
+					DEBUG ((DEBUG_INFO, "ASMM: Updated Variable: Pos = %d\n", Count-1));
 					break;
 				}
 			}
@@ -772,7 +778,7 @@ SmmVariableHandler (
 		CopyMem (&mVarBuffer[mVarCount], SmmVariableFunctionHeader->Data, CommBufferPayloadSize);
 		//memdump(&mVarBuffer[mVarCount], CommBufferPayloadSize, "NCACHE");
 		mVarCount++;
-		DEBUG ((DEBUG_INFO, "Ranbir: Added New Variable with Attribues = 0x%x, Net Count = %d\n", ((SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data)->Attributes, mVarCount));
+		DEBUG ((DEBUG_INFO, "ASMM: Added Variable: Attribues = 0x%x Total = %d\n", ((SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE *)SmmVariableFunctionHeader->Data)->Attributes, mVarCount));
 	}
       }
 #endif
@@ -784,9 +790,10 @@ SmmVariableHandler (
                  SmmVariableHeader->DataSize,
                  (UINT8 *)SmmVariableHeader->Name + SmmVariableHeader->NameSize
                  );
-      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->Attributes = %d\n", SmmVariableHeader->Attributes));
-      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->NameSize = %d\n", SmmVariableHeader->NameSize));
-      DEBUG ((DEBUG_INFO, "Ranbir: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
+      DEBUG ((DEBUG_INFO, "ASMM: SmmVariableHeader->Attributes = %d\n", SmmVariableHeader->Attributes));
+      DEBUG ((DEBUG_INFO, "ASMM: SmmVariableHeader->NameSize = %d\n", SmmVariableHeader->NameSize));
+      DEBUG ((DEBUG_INFO, "ASMM: SmmVariableHeader->DataSize = %d\n", SmmVariableHeader->DataSize));
+      DEBUG ((DEBUG_INFO, "ASMM: Processed SMM_VARIABLE_FUNCTION_SET_VARIABLE: CallCounter %d Status %r\n", mMMCallCounter, Status));
       break;
 
     case SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO:
@@ -806,7 +813,7 @@ SmmVariableHandler (
       break;
 
     case SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE:
-      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE\n"));
+      DEBUG ((DEBUG_INFO, "ASMM: Processing SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE: CallCounter %d\n", ++mMMCallCounter));
       if (CommBufferPayloadSize < sizeof (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE)) {
         DEBUG ((DEBUG_ERROR, "GetPayloadSize: SMM communication buffer size invalid!\n"));
         return EFI_SUCCESS;
@@ -815,10 +822,11 @@ SmmVariableHandler (
       GetPayloadSize                      = (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE *)SmmVariableFunctionHeader->Data;
       GetPayloadSize->VariablePayloadSize = mVariableBufferPayloadSize;
       Status                              = EFI_SUCCESS;
+      DEBUG ((DEBUG_INFO, "ASMM: Processed SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE: CallCounter %d\n", mMMCallCounter));
       break;
 
     case SMM_VARIABLE_FUNCTION_READY_TO_BOOT:
-      DEBUG ((DEBUG_INFO, "Ranbir: Processing SMM_VARIABLE_FUNCTION_READY_TO_BOOT\n"));
+      DEBUG ((DEBUG_INFO, "ASMM: Processing SMM_VARIABLE_FUNCTION_READY_TO_BOOT\n"));
       if (AtRuntime ()) {
         Status = EFI_UNSUPPORTED;
         break;
@@ -838,6 +846,7 @@ SmmVariableHandler (
 
       ReclaimForOS ();
       Status = EFI_SUCCESS;
+      DEBUG ((DEBUG_INFO, "ASMM: Processed SMM_VARIABLE_FUNCTION_READY_TO_BOOT\n"));
       break;
 
     case SMM_VARIABLE_FUNCTION_EXIT_BOOT_SERVICE:

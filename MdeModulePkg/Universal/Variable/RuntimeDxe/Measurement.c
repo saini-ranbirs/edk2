@@ -194,7 +194,7 @@ InternalGetVariable (
     *Size = 0;
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Call GetVariable\n"));
+  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Call GetVariable for Buffersize\n"));
   Status = gRT->GetVariable ((CHAR16 *)Name, (EFI_GUID *)Guid, NULL, &BufferSize, *Value);
   DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: BufferSize = %d\n", BufferSize));
   DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status1 = %r\n", Status));
@@ -214,6 +214,7 @@ InternalGetVariable (
   //
   // Get the variable data.
   //
+  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Call GetVariable for Data\n"));
   Status = gRT->GetVariable ((CHAR16 *)Name, (EFI_GUID *)Guid, NULL, &BufferSize, *Value);
   if (EFI_ERROR (Status)) {
     FreePool (*Value);

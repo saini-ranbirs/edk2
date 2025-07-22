@@ -143,7 +143,7 @@ SbiMpxySendMessage(
       );
     if(ResponseLen)
     *ResponseLen = Ret.Value;
-    DEBUG((DEBUG_INFO, "Ranbir: SbiMpxySendMessage: Response %d\n", __LINE__));
+    //DEBUG((DEBUG_INFO, "Ranbir: SbiMpxySendMessage: Response %d\n", __LINE__));
   }
 
   return TranslateError (Ret.Error);

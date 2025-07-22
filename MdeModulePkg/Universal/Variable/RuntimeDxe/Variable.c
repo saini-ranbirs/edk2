@@ -902,12 +902,12 @@ FindVariable (
                 mVariableModuleGlobal->VariableGlobal.AuthFormat
                 );
     if (!EFI_ERROR (Status)) {
-      DEBUG((DEBUG_INFO, "Ranbir: Variable EFI_FOUND\n"));
+      DEBUG((DEBUG_INFO, "ASMM: Variable EFI_FOUND\n"));
       return Status;
     }
   }
 
-  DEBUG((DEBUG_INFO, "Ranbir: Variable EFI_NOT_FOUND\n"));
+  DEBUG((DEBUG_INFO, "ASMM: Variable EFI_NOT_FOUND\n"));
   return EFI_NOT_FOUND;
 }
 
@@ -2671,7 +2671,7 @@ VariableServiceGetNextVariableName (
     *VariableNameSize = VarNameSize;
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: CallCount = %d Status2 = %r NameSize = %d\n", CallCount, Status, *VariableNameSize));
+  DEBUG ((DEBUG_INFO, "MM: CallCount = %d Status2 = %r NameSize = %d\n", CallCount, Status, *VariableNameSize));
   ReleaseLockOnlyAtBootTime (&mVariableModuleGlobal->VariableGlobal.VariableServicesLock);
   return Status;
 }
@@ -2728,7 +2728,7 @@ VariableServiceSetVariable (
 
   AuthFormat = mVariableModuleGlobal->VariableGlobal.AuthFormat;
 
-  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable IN \n"));
+  DEBUG ((DEBUG_INFO, "ASMM: VariableServiceSetVariable IN \n"));
   //
   // Check input parameters.
   //
@@ -3016,7 +3016,7 @@ Done:
     }
   }
 
-  DEBUG ((DEBUG_INFO, "Ranbir: VariableServiceSetVariable OUT \n"));
+  DEBUG ((DEBUG_INFO, "ASMM: VariableServiceSetVariable OUT \n"));
   return Status;
 }
 
