@@ -1,0 +1,188 @@
+commit 20f3cb26995fe609f789c2eb666bd9f1d8d9f239
+Author: Ranbir Singh <rsingh@ventanamicro.com>
+Date:   Tue Jul 22 22:13:03 2025 +0530
+
+    only debug prints
+
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+index 6c4fbf55b9..8e0f41130d 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+@@ -65,6 +65,7 @@ BOOLEAN                         mHobFlushComplete;
+ EFI_LOCK                        mVariableServicesLock;
+ EDKII_VARIABLE_LOCK_PROTOCOL    mVariableLock;
+ EDKII_VAR_CHECK_PROTOCOL        mVarCheck;
++UINTN                           mRSMMCallCounter = 0;
+ 
+ static void memdump(const void *src, UINTN count, char *name);
+ 
+@@ -77,7 +78,7 @@ static void memdump(const void *src, UINTN count, char *name)
+ 	UINTN bfr_counter, bfr_counter_limit;
+ 	UINTN remaining = count, loop_count = 0;
+ 
+-	DEBUG((DEBUG_INFO,"\nEDK2 - %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
++	DEBUG((DEBUG_INFO,"\nEDK2 RSMM - %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
+ 
+ 	while (remaining) {
+ 		bfr_counter = 0;
+@@ -295,7 +296,7 @@ InitCommunicateBuffer (
+     return EFI_INVALID_PARAMETER;
+   }
+ 
+-  DEBUG((DEBUG_INFO,"Ranbir: InitCommunicateBuffer: %d \n", DataSize + SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE));
++  DEBUG ((DEBUG_INFO, "RSMM: InitCommunicateBuffer: %d \n", DataSize + SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE));
+ 
+   SmmCommunicateHeader = (EFI_MM_COMMUNICATE_HEADER *)mVariableBuffer;
+   CopyGuid (&SmmCommunicateHeader->HeaderGuid, &gEfiSmmVariableProtocolGuid);
+@@ -840,13 +841,15 @@ FindVariableInSmm (
+ 
+   CopyMem (SmmVariableHeader->Name, VariableName, SmmVariableHeader->NameSize);
+ 
+-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer PayloadSize %ld \n", PayloadSize));
+   //
+   // Send data to SMM.
+   //
++  mRSMMCallCounter++;
++  DEBUG ((DEBUG_INFO, "RSMM: GetVariable: %d CallCounter %ld PayloadSize %ld \n",
++         __LINE__, mRSMMCallCounter, PayloadSize));
+   Status = SendCommunicateBuffer (PayloadSize);
++  DEBUG ((DEBUG_INFO, "RSMM: GetVariable: %d Status1 = %r\n", __LINE__, Status));
+ 
+-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status1 = %r\n", Status));
+   //
+   // Get data from SMM.
+   //
+@@ -873,7 +876,7 @@ FindVariableInSmm (
+   }
+ 
+ Done:
+-  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status2 = %r\n", Status));
++  DEBUG ((DEBUG_INFO, "RSMM: GetVariable: %d Status2 = %r\n", __LINE__, Status));
+   return Status;
+ }
+ 
+@@ -927,16 +930,16 @@ RuntimeServiceGetVariable (
+ 
+   AcquireLockOnlyAtBootTime (&mVariableServicesLock);
+   if (FeaturePcdGet (PcdEnableVariableRuntimeCache)) {
+-    DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable calling FindVariableInRuntimeCache\n"));
++    DEBUG ((DEBUG_INFO, "\nRSMM: RuntimeServiceGetVariable calling FindVariableInRuntimeCache\n"));
+     Status = FindVariableInRuntimeCache (VariableName, VendorGuid, Attributes, DataSize, Data);
+   } else {
+-    DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable calling FindVariableInSmm\n"));
++    DEBUG ((DEBUG_INFO, "\nRSMM: RuntimeServiceGetVariable calling FindVariableInSmm\n"));
+     Status = FindVariableInSmm (VariableName, VendorGuid, Attributes, DataSize, Data);
+   }
+ 
+   ReleaseLockOnlyAtBootTime (&mVariableServicesLock);
+ 
+-  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable Status %r\n", Status));
++  DEBUG ((DEBUG_INFO, "RSMM: RuntimeServiceGetVariable Status %r\n", Status));
+   if (Status == EFI_SUCCESS)
+ 	memdump(Data, *DataSize, "GVData");
+ 
+@@ -1115,11 +1118,13 @@ GetNextVariableNameInSmm (
+   if (OutVariableNameSize > InVariableNameSize) {
+     ZeroMem ((UINT8 *)SmmGetNextVariableName->Name + InVariableNameSize, OutVariableNameSize - InVariableNameSize);
+   }
+-  DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm before SMM\n"));
+ 
+   //
+   // Send data to SMM
+   //
++  mRSMMCallCounter++;
++  DEBUG ((DEBUG_INFO, "RSMM: GetNextVariableName: %d CallCounter %ld\n",
++         __LINE__, mRSMMCallCounter));
+   Status = SendCommunicateBuffer (PayloadSize);
+ 
+   //
+@@ -1132,17 +1137,17 @@ GetNextVariableNameInSmm (
+     //
+     *VariableNameSize = SmmGetNextVariableName->NameSize;
+     if (Status == EFI_BUFFER_TOO_SMALL)
+-	DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm updated VariableNameSize\n"));
+-    DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm VariableNameSize = %d\n", *VariableNameSize));
++	DEBUG ((DEBUG_INFO, "RSMM: GetNextVariableName updated VariableNameSize %d \n", __LINE__));
++    DEBUG ((DEBUG_INFO, "RSMM: GetNextVariableName %d VariableNameSize = %d\n", __LINE__, *VariableNameSize));
+   }
+ 
+   if (EFI_ERROR (Status)) {
+     goto Done;
+   }
+ 
+-  DEBUG ((DEBUG_INFO, "Ranbir: GetNextVariableNameInSmm after SMM\n"));
+   CopyGuid (VendorGuid, &SmmGetNextVariableName->Guid);
+   CopyMem (VariableName, SmmGetNextVariableName->Name, SmmGetNextVariableName->NameSize);
++  DEBUG ((DEBUG_INFO, "RSMM: GetNextVariableNameInSmm: Guid and Name copied\n"));
+ 
+ Done:
+   /*{
+@@ -1321,6 +1326,9 @@ RuntimeServiceSetVariable (
+   //
+   // Send data to SMM.
+   //
++  mRSMMCallCounter++;
++  DEBUG ((DEBUG_INFO, "RSMM: SetVariable: %d CallCounter %ld AtRuntime %d VariableNameSize %d DataSize %d Status %r\n",
++         __LINE__, mRSMMCallCounter, EfiAtRuntime (), VariableNameSize, DataSize, Status));
+   Status = SendCommunicateBuffer (PayloadSize);
+ 
+ Done:
+@@ -1335,8 +1343,6 @@ Done:
+     }
+   }
+ 
+-  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceSetVariable %d VariableNameSize %d DataSize %d Status %r\n", EfiAtRuntime (), VariableNameSize, DataSize, Status));
+-
+   return Status;
+ }
+ 
+@@ -1555,10 +1561,12 @@ GetVariablePayloadSize (
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE;
+   SmmGetPayloadSize                   = (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE *)SmmVariableFunctionHeader->Data;
+ 
+-  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmVariableFunctionHeader->Function));
+   //
+   // Send data to SMM.
+   //
++  mRSMMCallCounter++;
++  DEBUG ((DEBUG_INFO, "RSMM: GetVariablePayloadSize: %d CallCounter %ld : %d\n",
++         __LINE__, mRSMMCallCounter, SmmVariableFunctionHeader->Function));
+   Status = mMmCommunication2->Communicate (mMmCommunication2, CommBuffer, CommBuffer, &CommSize);
+   ASSERT_EFI_ERROR (Status);
+ 
+@@ -1571,7 +1579,7 @@ GetVariablePayloadSize (
+   // Get data from SMM.
+   //
+   *VariablePayloadSize = SmmGetPayloadSize->VariablePayloadSize;
+-  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmGetPayloadSize->VariablePayloadSize));
++  DEBUG ((DEBUG_INFO, "RSMM: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmGetPayloadSize->VariablePayloadSize));
+ 
+ Done:
+   if (CommBuffer != NULL) {
+@@ -1635,7 +1643,7 @@ GetRuntimeCacheInfo (
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_RUNTIME_CACHE_INFO;
+   SmmGetRuntimeCacheInfo              = (SMM_VARIABLE_COMMUNICATE_GET_RUNTIME_CACHE_INFO *)SmmVariableFunctionHeader->Data;
+ 
+-  DEBUG((DEBUG_INFO,"Ranbir: GetRuntimeCacheInfo: %d\n", __LINE__));
++  DEBUG ((DEBUG_INFO, "RSMM: GetRuntimeCacheInfo: %d\n", __LINE__));
+   //
+   // Send data to SMM.
+   //
+@@ -1709,7 +1717,7 @@ SendRuntimeVariableCacheContextToSmm (
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_INIT_RUNTIME_VARIABLE_CACHE_CONTEXT;
+   SmmRuntimeVarCacheContext           = (SMM_VARIABLE_COMMUNICATE_RUNTIME_VARIABLE_CACHE_CONTEXT *)SmmVariableFunctionHeader->Data;
+ 
+-  DEBUG((DEBUG_INFO,"Ranbir: SendRuntimeVariableCacheContextToSmm: %d\n", __LINE__));
++  DEBUG ((DEBUG_INFO, "RSMM: SendRuntimeVariableCacheContextToSmm: %d\n", __LINE__));
+ 
+   SmmRuntimeVarCacheContext->RuntimeHobCache      = mVariableRuntimeHobCacheBuffer;
+   SmmRuntimeVarCacheContext->RuntimeVolatileCache = mVariableRuntimeVolatileCacheBuffer;
+@@ -1794,7 +1802,7 @@ SmmVariableReady (
+   // Allocate memory for variable communicate buffer.
+   //
+   Status = GetVariablePayloadSize (&mVariableBufferPayloadSize);
+-  DEBUG((DEBUG_INFO,"Ranbir: mVariableBufferPayloadSize: %d\n", mVariableBufferPayloadSize));
++  DEBUG ((DEBUG_INFO, "RSMM: mVariableBufferPayloadSize: %d\n", mVariableBufferPayloadSize));
+   ASSERT_EFI_ERROR (Status);
+   mVariableBufferSize = SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE + mVariableBufferPayloadSize;
+   mVariableBuffer     = AllocateRuntimePool (mVariableBufferSize);

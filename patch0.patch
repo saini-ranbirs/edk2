@@ -1,0 +1,611 @@
+diff --git a/EmbeddedPkg/Library/VirtualRealTimeClockLib/VirtualRealTimeClockLib.c b/EmbeddedPkg/Library/VirtualRealTimeClockLib/VirtualRealTimeClockLib.c
+index f066b1f7e1..4f27ca4c3b 100644
+--- a/EmbeddedPkg/Library/VirtualRealTimeClockLib/VirtualRealTimeClockLib.c
++++ b/EmbeddedPkg/Library/VirtualRealTimeClockLib/VirtualRealTimeClockLib.c
+@@ -69,6 +69,7 @@ LibGetTime (
+   // Get the epoch time from non-volatile storage
+   Size         = sizeof (UINTN);
+   EpochSeconds = 0;
++  DEBUG ((DEBUG_INFO, "Ranbir: EfiGetVariable\n"));
+   Status       = EfiGetVariable (
+                    (CHAR16 *)mEpochVariableName,
+                    &gEfiCallerIdGuid,
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/Measurement.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/Measurement.c
+index a52683a9e3..f3ddcea5f5 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/Measurement.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/Measurement.c
+@@ -194,7 +194,10 @@ InternalGetVariable (
+     *Size = 0;
+   }
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Call GetVariable\n"));
+   Status = gRT->GetVariable ((CHAR16 *)Name, (EFI_GUID *)Guid, NULL, &BufferSize, *Value);
++  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: BufferSize = %d\n", BufferSize));
++  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status1 = %d\n", Status));
+   if (Status != EFI_BUFFER_TOO_SMALL) {
+     return Status;
+   }
+@@ -221,6 +224,7 @@ InternalGetVariable (
+     *Size = BufferSize;
+   }
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: InternalGetVariable: Status2 = %d\n", Status));
+   return Status;
+ }
+ 
+@@ -242,6 +246,8 @@ SecureBootHook (
+   UINTN       VariableDataSize;
+   VOID        *VariableData;
+ 
++  DEBUG ((DEBUG_INFO, "MUVRM SecureBootHook\n"));
++
+   if (!IsSecureBootPolicyVariable (VariableName, VendorGuid)) {
+     return;
+   }
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+index 5a0306164c..a337fca190 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+@@ -60,6 +60,56 @@ EDKII_VAR_CHECK_PROTOCOL        mVarCheck;
+ VARIABLE_RUNTIME_CACHE_INFO     mVariableRtCacheInfo;
+ BOOLEAN                         mIsRuntimeCacheEnabled = FALSE;
+ 
++static void memdump(const void *src, UINTN count, char *name);
++
++static void memdump(const void *src, UINTN count, char *name)
++{
++#define BFR_DATA_LIMIT  16
++
++	const char *temp = src;
++	unsigned char bfr_data[BFR_DATA_LIMIT];
++	UINTN bfr_counter, bfr_counter_limit;
++	UINTN remaining = count, loop_count = 0;
++
++	DEBUG((DEBUG_INFO,"\nEDK2 - %s : %06lu %d", name, count, sizeof(SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE)));
++
++	while (remaining) {
++		bfr_counter = 0;
++
++		(remaining >= BFR_DATA_LIMIT) ?
++		    (bfr_counter_limit = BFR_DATA_LIMIT) :
++		    (bfr_counter_limit = remaining);
++
++		while (bfr_counter < bfr_counter_limit) {
++			bfr_data[bfr_counter] = *(temp + bfr_counter);
++			bfr_counter++;
++		}
++
++		/* For simplicity, fill rest with ZERO's if required */
++		while (bfr_counter < BFR_DATA_LIMIT) {
++			bfr_data[bfr_counter] = 0x00;
++			bfr_counter++;
++		}
++
++		if (loop_count < 7) {
++		DEBUG((DEBUG_INFO,"\n%p: %06lu "
++			"%02x%02x %02x%02x %02x%02x %02x%02x "
++			"%02x%02x %02x%02x %02x%02x %02x%02x",
++			temp, count - remaining,
++			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
++			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
++			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
++			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
++		}
++
++		temp = temp + bfr_counter_limit;
++		remaining = remaining - bfr_counter_limit;
++		loop_count++;
++	}
++
++	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
++}
++
+ /**
+   The logic to initialize the VariablePolicy engine is in its own file.
+ 
+@@ -170,6 +220,8 @@ InitCommunicateBuffer (
+     return EFI_INVALID_PARAMETER;
+   }
+ 
++  DEBUG((DEBUG_INFO,"Ranbir: InitCommunicateBuffer: %d \n", DataSize + SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE));
++
+   SmmCommunicateHeader = (EFI_MM_COMMUNICATE_HEADER *)mVariableBuffer;
+   CopyGuid (&SmmCommunicateHeader->HeaderGuid, &gEfiSmmVariableProtocolGuid);
+   SmmCommunicateHeader->MessageLength = DataSize + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE;
+@@ -680,6 +732,8 @@ FindVariableInSmm (
+     return EFI_INVALID_PARAMETER;
+   }
+ 
++  memdump(VariableName, VariableNameSize, "VariableName");
++
+   //
+   // Init the communicate buffer. The buffer data size is:
+   // SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE + PayloadSize.
+@@ -691,10 +745,13 @@ FindVariableInSmm (
+     TempDataSize = mVariableBufferPayloadSize - OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name) - VariableNameSize;
+   }
+ 
++  memdump(VendorGuid, sizeof(EFI_GUID), "VendorGuid");
++
+   PayloadSize = OFFSET_OF (SMM_VARIABLE_COMMUNICATE_ACCESS_VARIABLE, Name) + VariableNameSize + TempDataSize;
+ 
+   Status = InitCommunicateBuffer ((VOID **)&SmmVariableHeader, PayloadSize, SMM_VARIABLE_FUNCTION_GET_VARIABLE);
+   if (EFI_ERROR (Status)) {
++    DEBUG ((DEBUG_INFO, "Ranbir: InitCommunicateBuffer failed\n"));
+     goto Done;
+   }
+ 
+@@ -711,11 +768,14 @@ FindVariableInSmm (
+ 
+   CopyMem (SmmVariableHeader->Name, VariableName, SmmVariableHeader->NameSize);
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer PayloadSize %d \n", PayloadSize));
+   //
+   // Send data to SMM.
+   //
+   Status = SendCommunicateBuffer (PayloadSize);
++  //Status = EFI_NOT_FOUND; Attributes = NULL;
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status1 = %d\n", Status));
+   //
+   // Get data from SMM.
+   //
+@@ -742,6 +802,7 @@ FindVariableInSmm (
+   }
+ 
+ Done:
++  DEBUG ((DEBUG_INFO, "Ranbir: SendCommunicateBuffer: Status2 = %d\n", Status));
+   return Status;
+ }
+ 
+@@ -793,6 +854,7 @@ RuntimeServiceGetVariable (
+     return EFI_NOT_FOUND;
+   }
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable mIsRuntimeCacheEnabled %d\n", mIsRuntimeCacheEnabled));
+   AcquireLockOnlyAtBootTime (&mVariableServicesLock);
+   if (mIsRuntimeCacheEnabled) {
+     Status = FindVariableInRuntimeCache (VariableName, VendorGuid, Attributes, DataSize, Data);
+@@ -802,6 +864,7 @@ RuntimeServiceGetVariable (
+ 
+   ReleaseLockOnlyAtBootTime (&mVariableServicesLock);
+ 
++  DEBUG ((DEBUG_INFO, "Ranbir: RuntimeServiceGetVariable Status %d\n", Status));
+   return Status;
+ }
+ 
+@@ -1168,6 +1231,7 @@ RuntimeServiceSetVariable (
+   // Send data to SMM.
+   //
+   Status = SendCommunicateBuffer (PayloadSize);
++  DEBUG ((DEBUG_INFO, "Ranbir: %d RuntimeServiceSetVariable VariableNameSize %d DataSize %d Status %d\n", EfiAtRuntime (), VariableNameSize, DataSize, Status));
+ 
+ Done:
+   ReleaseLockOnlyAtBootTime (&mVariableServicesLock);
+@@ -1399,6 +1463,7 @@ GetVariablePayloadSize (
+   SmmVariableFunctionHeader           = (SMM_VARIABLE_COMMUNICATE_HEADER *)SmmCommunicateHeader->Data;
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE;
+   SmmGetPayloadSize                   = (SMM_VARIABLE_COMMUNICATE_GET_PAYLOAD_SIZE *)SmmVariableFunctionHeader->Data;
++  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmVariableFunctionHeader->Function));
+ 
+   //
+   // Send data to SMM.
+@@ -1415,6 +1480,7 @@ GetVariablePayloadSize (
+   // Get data from SMM.
+   //
+   *VariablePayloadSize = SmmGetPayloadSize->VariablePayloadSize;
++  DEBUG((DEBUG_INFO, "Ranbir: GetVariablePayloadSize: %d : %d\n", __LINE__, SmmGetPayloadSize->VariablePayloadSize));
+ 
+ Done:
+   if (CommBuffer != NULL) {
+@@ -1477,6 +1543,7 @@ GetRuntimeCacheInfo (
+   SmmVariableFunctionHeader           = (SMM_VARIABLE_COMMUNICATE_HEADER *)SmmCommunicateHeader->Data;
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_GET_RUNTIME_CACHE_INFO;
+   SmmGetRuntimeCacheInfo              = (SMM_VARIABLE_COMMUNICATE_GET_RUNTIME_CACHE_INFO *)SmmVariableFunctionHeader->Data;
++  DEBUG((DEBUG_INFO,"Ranbir: GetRuntimeCacheInfo: %d\n", __LINE__));
+ 
+   //
+   // Send data to SMM.
+@@ -1627,6 +1694,7 @@ SendRuntimeVariableCacheContextToSmm (
+   SmmVariableFunctionHeader           = (SMM_VARIABLE_COMMUNICATE_HEADER *)SmmCommunicateHeader->Data;
+   SmmVariableFunctionHeader->Function = SMM_VARIABLE_FUNCTION_INIT_RUNTIME_VARIABLE_CACHE_CONTEXT;
+   SmmRuntimeVarCacheContext           = (SMM_VARIABLE_COMMUNICATE_RUNTIME_VARIABLE_CACHE_CONTEXT *)SmmVariableFunctionHeader->Data;
++  DEBUG((DEBUG_INFO,"Ranbir: SendRuntimeVariableCacheContextToSmm: %d\n", __LINE__));
+ 
+   SmmRuntimeVarCacheContext->RuntimeHobCache      = (VARIABLE_STORE_HEADER *)(UINTN)mVariableRtCacheInfo.RuntimeHobCacheBuffer;
+   SmmRuntimeVarCacheContext->RuntimeVolatileCache = (VARIABLE_STORE_HEADER *)(UINTN)mVariableRtCacheInfo.RuntimeVolatileCacheBuffer;
+@@ -1684,6 +1752,7 @@ SmmVariableReady (
+   // Allocate memory for variable communicate buffer.
+   //
+   Status = GetVariablePayloadSize (&mVariableBufferPayloadSize);
++  DEBUG((DEBUG_INFO,"Ranbir: mVariableBufferPayloadSize: %d\n", mVariableBufferPayloadSize));
+   ASSERT_EFI_ERROR (Status);
+   mVariableBufferSize = SMM_COMMUNICATE_HEADER_SIZE + SMM_VARIABLE_COMMUNICATE_HEADER_SIZE + mVariableBufferPayloadSize;
+   mVariableBuffer     = AllocateRuntimePool (mVariableBufferSize);
+diff --git a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunicate.h b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunicate.h
+index 0c1d25e76e..693c6b0755 100755
+--- a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunicate.h
++++ b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunicate.h
+@@ -23,9 +23,9 @@
+ #define MPXY_SHMEM_SIZE	4096
+ 
+ // SMM Message ID
+-#define RISCV_MSG_ID_SMM_VERSION        0x1
+-#define RISCV_MSG_ID_SMM_COMMUNICATE		0x2
+-#define RISCV_MSG_ID_SMM_EVENT_COMPLETE	0x3
++#define RISCV_MSG_ID_SMM_ENABLE_NOTIFICATION    0x1
++#define RISCV_MSG_ID_SMM_GET_ATTRIBUTES         0x2
++#define RISCV_MSG_ID_SMM_COMMUNICATE            0x3
+ 
+ // SMM return error codes
+ #define RISCV_SMM_RET_SUCCESS         0
+@@ -35,8 +35,18 @@
+ #define RISCV_SMM_RET_NO_MEMORY       -4
+ 
+ typedef struct {
+-  UINTN    Arg0;
+-  UINTN    Arg1;
++  UINT32    Arg0;
++  UINT32    Arg1;
++  UINT32    Arg2;
++  UINT32    Arg3;
++  UINT32    Arg4;
++} RISCV_SMM_MSG_ATTR_ARGS;
++
++typedef struct {
++  UINT32    Arg0;
++  UINT32    Arg1;
++  UINT32    Arg2;
++  UINT32    Arg3;
+ } RISCV_SMM_MSG_COMM_ARGS;
+ 
+ typedef struct {
+diff --git a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
+index daf6338c87..cbdd53fd49 100755
+--- a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
++++ b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
+@@ -70,6 +70,59 @@ STATIC UINT32 mMmChannelId = 0;
+                                  accessed by the MM environment.
+ 
+ **/
++static void memdump(const void *src, UINTN count, void *dest);
++
++static void memdump(const void *src, UINTN count, void *dest)
++{
++#define BFR_DATA_LIMIT  16
++
++	const char *temp = src;
++	char *tmp = dest;
++	unsigned char bfr_data[BFR_DATA_LIMIT];
++	UINTN bfr_counter, bfr_counter_limit;
++	UINTN remaining = count, loop_count = 0;
++
++	DEBUG((DEBUG_INFO,"\nEDK2 - Data Size : %06lu", count));
++
++	while (remaining) {
++		bfr_counter = 0;
++
++		(remaining >= BFR_DATA_LIMIT) ?
++		    (bfr_counter_limit = BFR_DATA_LIMIT) :
++		    (bfr_counter_limit = remaining);
++
++		while (bfr_counter < bfr_counter_limit) {
++			bfr_data[bfr_counter] = *(temp + bfr_counter);
++			if (dest)
++				*(tmp + bfr_counter) = bfr_data[bfr_counter];
++			bfr_counter++;
++		}
++
++		/* For simplicity, fill rest with ZERO's if required */
++		while (bfr_counter < BFR_DATA_LIMIT) {
++			bfr_data[bfr_counter] = 0x00;
++			bfr_counter++;
++		}
++
++		if (loop_count < 10) {
++		DEBUG((DEBUG_INFO,"\n%p: %06lu "
++			"%02x%02x %02x%02x %02x%02x %02x%02x "
++			"%02x%02x %02x%02x %02x%02x %02x%02x",
++			temp, count - remaining,
++			bfr_data[1], bfr_data[0], bfr_data[3], bfr_data[2],
++			bfr_data[5], bfr_data[4], bfr_data[7], bfr_data[6],
++			bfr_data[9], bfr_data[8], bfr_data[11], bfr_data[10],
++			bfr_data[13], bfr_data[12], bfr_data[15], bfr_data[14]));
++		}
++
++		temp = temp + bfr_counter_limit;
++		remaining = remaining - bfr_counter_limit;
++		loop_count++;
++	}
++
++	DEBUG((DEBUG_INFO,"\n%p: %06lu\n\n", temp, count - remaining));
++}
++
+ EFI_STATUS
+ EFIAPI
+ MmCommunication2Communicate (
+@@ -81,14 +134,16 @@ MmCommunication2Communicate (
+ {
+ 
+   EFI_MM_COMMUNICATE_HEADER  *CommunicateHeader;
+-  RISCV_SMM_MSG_COMM_ARGS     CommunicateArgs;
++  RISCV_SMM_MSG_COMM_ARGS     CommunicateReqArgs;
++  RISCV_SMM_MSG_COMM_ARGS     CommunicateRspArgs;
+   EFI_STATUS                 Status;
+   UINTN                      BufferSize;
+   UINTN                      MmRespLen;
+   Status     = EFI_ACCESS_DENIED;
+   BufferSize = 0;
+ 
+-  ZeroMem (&CommunicateArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
++  ZeroMem (&CommunicateReqArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
++  ZeroMem (&CommunicateRspArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS));
+ 
+   //
+   // Check parameters
+@@ -147,21 +202,33 @@ MmCommunication2Communicate (
+   // Copy Communication Payload
+   CopyMem ((VOID *)mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize);
+ 
+-  // comm_buffer_address (64-bit physical address)
+-  CommunicateArgs.Arg0 = (UINTN)mNsCommBuffMemRegion.PhysicalBase;
++  // MM_COMM_INPUT_DATA_OFFSET - MM always uses entire SM
++  CommunicateReqArgs.Arg0 = 0;
++  CommunicateReqArgs.Arg1 = BufferSize;
++  CommunicateReqArgs.Arg2 = BufferSize;
++  CommunicateReqArgs.Arg3 = mNsCommBuffMemRegion.Length - CommunicateReqArgs.Arg2;
+ 
+-  // comm_size_address (not used, indicated by setting to zero)
+-  CommunicateArgs.Arg1 = 0;
++  memdump ((VOID *)mNsCommBuffMemRegion.VirtualBase, BufferSize, NULL);
++  DEBUG ((
++    DEBUG_INFO,
++    "Ranbir: Calling SbiMpxySendMessage - CopyMem Addr 0x%p 0x%x BufferSize = 0x%x\n",
++    mNsCommBuffMemRegion.VirtualBase, CommBufferVirtual, BufferSize
++    ));
+ 
+   // Call the Standalone MM environment.
+   Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_COMMUNICATE,
+-		(VOID *)&CommunicateArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
+-		(VOID *)&CommunicateArgs, &MmRespLen);
++		(VOID *)&CommunicateReqArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
++		(VOID *)&CommunicateRspArgs, &MmRespLen);
++  DEBUG ((
++    DEBUG_INFO,
++    "Ranbir: SbiMpxySendMessage RspArgs.Arg0 %d RspArgs.Arg1 %d MmRespLen %d\n",
++    CommunicateRspArgs.Arg0, CommunicateRspArgs.Arg1, MmRespLen
++    ));
+   if (EFI_ERROR (Status) || (0 == MmRespLen)) {
+     return Status;
+   }
+ 
+-  switch (CommunicateArgs.Arg0) {
++  switch (CommunicateRspArgs.Arg0) {
+     case RISCV_SMM_RET_SUCCESS:
+       ZeroMem (CommBufferVirtual, BufferSize);
+       // On successful return, the size of data being returned is inferred from
+@@ -171,11 +238,16 @@ MmCommunication2Communicate (
+                           sizeof (CommunicateHeader->HeaderGuid) +
+                           sizeof (CommunicateHeader->MessageLength);
+ 
+-      CopyMem (
+-        CommBufferVirtual,
+-        (VOID *)mNsCommBuffMemRegion.VirtualBase,
+-        BufferSize
+-        );
++      DEBUG ((
++        DEBUG_INFO,
++        "Ranbir: MmCommunication2Communicate - Response Addr 0x%p "
++        "Response Len %d BufferSize = 0x%x\n",
++        (VOID *)mNsCommBuffMemRegion.VirtualBase + CommunicateReqArgs.Arg2,
++        CommunicateRspArgs.Arg1, BufferSize
++        ));
++      CopyMem (CommBufferVirtual,
++               (VOID *)mNsCommBuffMemRegion.VirtualBase + CommunicateReqArgs.Arg2,
++               BufferSize);
+       Status = EFI_SUCCESS;
+       break;
+ 
+@@ -223,7 +295,7 @@ GetMmMpxyChannelId (
+                   );
+   ASSERT_EFI_ERROR (Status);
+ 
+-  Status = FdtClient->FindCompatibleNode (FdtClient, "riscv,sbi-mpxy-mm", &Node);
++  Status = FdtClient->FindCompatibleNode (FdtClient, "riscv,rpmi-mpxy-mm", &Node);
+   if (EFI_ERROR (Status)) {
+     DEBUG ((
+       DEBUG_WARN,
+@@ -258,6 +330,21 @@ GetMmMpxyChannelId (
+   return EFI_SUCCESS;
+ }
+ 
++STATIC
++EFI_STATUS
++MmChannelInit()
++{
++  // Check if the Mpxy channel exist
++  if (GetMmMpxyChannelId(&mMmChannelId) != EFI_SUCCESS) {
++    return EFI_NOT_READY;;
++  }
++
++  if (SbiMpxyChannelOpen (mMmChannelId) != EFI_SUCCESS) {
++    return EFI_NOT_READY;;
++  }
++
++  return EFI_SUCCESS;
++}
+ //
+ // MM Communication Protocol instance
+ //
+@@ -267,23 +354,26 @@ STATIC EFI_MM_COMMUNICATION2_PROTOCOL  mMmCommunication2 = {
+ 
+ STATIC
+ EFI_STATUS
+-GetMmCompatibility (
++GetMmAttributes (
+   )
+ {
+-  EFI_STATUS    Status;
+-  UINT32        MmVersion;
+-  RISCV_SMM_MSG_COMM_ARGS  MmVersionArgs;
+-  UINTN         MmRespLen;
++  RISCV_SMM_MSG_ATTR_ARGS  MmAttrArgs;
++  EFI_STATUS               Status;
++  UINT32                   MmVersion;
++  UINT64                   ShmemHigh32;
++  UINTN                    MmRespLen;
+ 
+-  Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_VERSION,
+-		(VOID *)&MmVersionArgs, sizeof (RISCV_SMM_MSG_COMM_ARGS),
+-		(VOID *)&MmVersionArgs, &MmRespLen);
++  Status = SbiMpxySendMessage(mMmChannelId, RISCV_MSG_ID_SMM_GET_ATTRIBUTES,
++		             (VOID *)&MmAttrArgs, 0,
++		             (VOID *)&MmAttrArgs, &MmRespLen);
+ 
+-  if (EFI_ERROR (Status) || (0 == MmRespLen)) {
+-    return Status;
++
++  if (EFI_ERROR (Status) || (0 == MmRespLen))
++  {
++    return EFI_UNSUPPORTED;
+   }
+ 
+-  MmVersion = MmVersionArgs.Arg0;
++  MmVersion = MmAttrArgs.Arg1;
+ 
+   if ((MM_MAJOR_VER (MmVersion) == MM_CALLER_MAJOR_VER) &&
+       (MM_MINOR_VER (MmVersion) >= MM_CALLER_MINOR_VER))
+@@ -307,6 +397,21 @@ GetMmCompatibility (
+     Status = EFI_UNSUPPORTED;
+   }
+ 
++  // Shared Memory between NS and Secure domains
++  ShmemHigh32 = MmAttrArgs.Arg3;
++  mNsCommBuffMemRegion.PhysicalBase = (ShmemHigh32 << 32) | MmAttrArgs.Arg2;
++  // During boot, Virtual and Physical are same
++  mNsCommBuffMemRegion.VirtualBase = mNsCommBuffMemRegion.PhysicalBase;
++  mNsCommBuffMemRegion.Length      = MmAttrArgs.Arg4;
++
++  DEBUG ((
++    DEBUG_INFO,
++    "MM Address: 0x%x%x, Size=0x%x\n",
++    MmAttrArgs.Arg3,
++    MmAttrArgs.Arg2,
++    MmAttrArgs.Arg4
++    ));
++
+   return Status;
+ }
+ 
+@@ -344,6 +449,10 @@ MmGuidedEventNotify (
+   Header.Data[0]       = 0;
+ 
+   Size = sizeof (Header);
++  DEBUG ((
++     DEBUG_INFO,
++     "calling MmCommunication2Communicate - RS 1\n"
++     ));
+   MmCommunication2Communicate (&mMmCommunication2, &Header, &Header, &Size);
+ }
+ 
+@@ -370,48 +479,18 @@ MmCommunication2Initialize (
+ {
+   EFI_STATUS  Status;
+   UINTN       Index;
+-  VOID        *SbiShmem;
+-  UINT64      ShmemP;
+ 
+-  // Check if the Mpxy channel exist
+-  Status = GetMmMpxyChannelId(&mMmChannelId);
++  Status = MmChannelInit();
+   if (EFI_ERROR (Status)) {
+-    goto ReturnErrorStatus;
+-  }
+-
+-  if(FALSE == SbiMpxyShmemInitialized()) {
+-	//
+-	// Allocate memory to be shared with OpenSBI for MPXY
+-	//
+-	SbiShmem = AllocateAlignedPages (EFI_SIZE_TO_PAGES(MPXY_SHMEM_SIZE),
+-				MPXY_SHMEM_SIZE // Align
+-				);
+-
+-	if (SbiShmem == NULL) {
+-		goto ReturnErrorStatus;
+-	}
+-	ZeroMem (SbiShmem, MPXY_SHMEM_SIZE);
+-	ShmemP = (UINT64)(SbiShmem);
+-    Status = SbiMpxySetShmem (0UL,
+-             ShmemP,
+-             MPXY_SHMEM_SIZE
+-             );
+-    if (EFI_ERROR(Status)) {
+-		goto ReturnErrorStatus;
+-    }
++    return Status;
+   }
+ 
+   // Check if we can make the MM call
+-  Status = GetMmCompatibility ();
++  Status = GetMmAttributes ();
+   if (EFI_ERROR (Status)) {
+-    goto ReturnErrorStatus;
++    return Status;
+   }
+ 
+-  mNsCommBuffMemRegion.PhysicalBase = PcdGet64 (PcdMmBufferBase);
+-  // During boot , Virtual and Physical are same
+-  mNsCommBuffMemRegion.VirtualBase = mNsCommBuffMemRegion.PhysicalBase;
+-  mNsCommBuffMemRegion.Length      = PcdGet64 (PcdMmBufferSize);
+-
+   ASSERT (mNsCommBuffMemRegion.PhysicalBase != 0);
+ 
+   ASSERT (mNsCommBuffMemRegion.Length != 0);
+@@ -466,6 +545,5 @@ CleanAddedMemorySpace:
+          mNsCommBuffMemRegion.Length
+          );
+ 
+-ReturnErrorStatus:
+   return EFI_INVALID_PARAMETER;
+ }
+diff --git a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.inf b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.inf
+index c2552ec508..b89232e017 100755
+--- a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.inf
++++ b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.inf
+@@ -51,10 +51,6 @@
+   gEfiEventExitBootServicesGuid
+   gEfiEventReadyToBootGuid
+ 
+-[Pcd.common]
+-  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferBase
+-  gUefiOvmfPkgTokenSpaceGuid.PcdMmBufferSize
+-
+ [Depex]
+   gEfiCpuArchProtocolGuid AND
+-  gFdtClientProtocolGuid
+\ No newline at end of file
++  gFdtClientProtocolGuid
+diff --git a/OvmfPkg/RiscVVirt/Sec/Platform.c b/OvmfPkg/RiscVVirt/Sec/Platform.c
+index c664324730..d36a72dee9 100644
+--- a/OvmfPkg/RiscVVirt/Sec/Platform.c
++++ b/OvmfPkg/RiscVVirt/Sec/Platform.c
+@@ -141,6 +141,7 @@ PlatformPeimInitialization (
+   PopulateIoResources (Base, "ns16550a");
+   PopulateIoResources (Base, "qemu,fw-cfg-mmio");
+   PopulateIoResources (Base, "virtio,mmio");
++  PopulateIoResources (Base, "riscv,rpmi-mm");
+ 
+   return EFI_SUCCESS;
+ }
+diff --git a/StandaloneMmPkg/Library/VariableMmDependency/VariableMmDependency.c b/StandaloneMmPkg/Library/VariableMmDependency/VariableMmDependency.c
+index f647fc5258..98e31989fd 100644
+--- a/StandaloneMmPkg/Library/VariableMmDependency/VariableMmDependency.c
++++ b/StandaloneMmPkg/Library/VariableMmDependency/VariableMmDependency.c
+@@ -34,6 +34,7 @@ VariableMmDependencyLibConstructor (
+   EFI_HANDLE  Handle;
+ 
+   Handle = NULL;
++  DEBUG((DEBUG_INFO,"Ranbir: VariableMmDependencyLibConstructor: %d\n", __LINE__));
+   Status = gBS->InstallMultipleProtocolInterfaces (
+                   &Handle,
+                   &gEfiSmmVariableProtocolGuid,

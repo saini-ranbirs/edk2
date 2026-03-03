@@ -1,0 +1,54 @@
+From 5bf94f4b9aeefa3bee1eceb55eadcc0baac77b15 Mon Sep 17 00:00:00 2001
+From: Ranbir Singh <rsingh@ventanamicro.com>
+Date: Thu, 3 Jul 2025 09:52:12 +0530
+Subject: [PATCH] ENABLE_RS_SVA for smm-2 build and disable it for smm-1 build
+
+Signed-off-by: Ranbir Singh <rsingh@ventanamicro.com>
+---
+ MdeModulePkg/Universal/Variable/RuntimeDxe/Variable.c        | 2 +-
+ MdeModulePkg/Universal/Variable/RuntimeDxe/VariableParsing.c | 2 +-
+ MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/Variable.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/Variable.c
+index a5d816887e..4d4caf2c8b 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/Variable.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/Variable.c
+@@ -31,7 +31,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ #include "VariableRuntimeCache.h"
+ #include <Guid/SmmVariableCommon.h>
+ 
+-#define ENABLE_RS_SVA  0
++#define ENABLE_RS_SVA  1
+ 
+ #if ENABLE_RS_SVA
+ extern UINT8 mVarCount;
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableParsing.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableParsing.c
+index 2faf0eb545..ea3b07c922 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableParsing.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableParsing.c
+@@ -10,7 +10,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ #include "VariableParsing.h"
+ #include <Guid/SmmVariableCommon.h>
+ 
+-#define ENABLE_RS_SVA  0
++#define ENABLE_RS_SVA  1
+ 
+ #if ENABLE_RS_SVA
+ extern UINT8 mVarCount;
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
+index 6ee07ed4b0..0d32dcdf3f 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
+@@ -40,7 +40,7 @@ BOOLEAN  mAtRuntime              = FALSE;
+ UINT8    *mVariableBufferPayload = NULL;
+ UINTN    mVariableBufferPayloadSize;
+ 
+-#define ENABLE_RS_SVA  0
++#define ENABLE_RS_SVA  1
+ 
+ #if ENABLE_RS_SVA
+ struct VarCache {
+-- 
+2.43.0
+

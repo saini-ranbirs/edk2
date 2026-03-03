@@ -1,0 +1,62 @@
+From 7e873279b71d17ea714e4901ad6abfd8adee7847 Mon Sep 17 00:00:00 2001
+From: Ranbir Singh <rsingh@ventanamicro.com>
+Date: Fri, 27 Jun 2025 22:01:11 +0530
+Subject: [PATCH] Effectively disable memdump
+
+Signed-off-by: Ranbir Singh <rsingh@ventanamicro.com>
+---
+ MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c    | 2 ++
+ .../Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c   | 6 ++++--
+ OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c      | 2 ++
+ 3 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
+index bbbbbdf247..0d32dcdf3f 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.c
+@@ -444,6 +444,8 @@ void memdump(const void *src, UINTN count, char *name)
+ {
+ #define BFR_DATA_LIMIT  16
+ 
++	return;
++
+ 	const char *temp = src;
+ 	unsigned char bfr_data[BFR_DATA_LIMIT];
+ 	UINTN bfr_counter, bfr_counter_limit;
+diff --git a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+index bffa9ced80..a177fd94d3 100644
+--- a/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
++++ b/MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmmRuntimeDxe.c
+@@ -66,12 +66,14 @@ EFI_LOCK                        mVariableServicesLock;
+ EDKII_VARIABLE_LOCK_PROTOCOL    mVariableLock;
+ EDKII_VAR_CHECK_PROTOCOL        mVarCheck;
+ 
+-static void memdump(const void *src, UINTN count, char *name);
++void memdump(const void *src, UINTN count, char *name);
+ 
+-static void memdump(const void *src, UINTN count, char *name)
++void memdump(const void *src, UINTN count, char *name)
+ {
+ #define BFR_DATA_LIMIT  16
+ 
++	return;
++
+ 	const char *temp = src;
+ 	unsigned char bfr_data[BFR_DATA_LIMIT];
+ 	UINTN bfr_counter, bfr_counter_limit;
+diff --git a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
+index a86fa085d1..eaee52dcae 100755
+--- a/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
++++ b/OvmfPkg/RiscVVirt/MmCommunicationDxe/MmCommunication.c
+@@ -46,6 +46,8 @@ static void memdump(const void *src, UINTN count, void *dest)
+ {
+ #define BFR_DATA_LIMIT  16
+ 
++	return;
++
+ 	const char *temp = src;
+ 	char *tmp = dest;
+ 	unsigned char bfr_data[BFR_DATA_LIMIT];
+-- 
+2.43.0
+
